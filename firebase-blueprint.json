@@ -1,0 +1,173 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile & Garage",
+      "description": "Stores user garage, unlocked cars, stats, and coins",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "description": "User display name",
+          "maxLength": 64
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "maxLength": 128
+        },
+        "coins": {
+          "type": "number",
+          "description": "Earned game coins"
+        },
+        "activeCarId": {
+          "type": "string",
+          "description": "Currently selected vehicle ID",
+          "maxLength": 32
+        },
+        "unlockedCars": {
+          "type": "array",
+          "description": "List of unlocked vehicle IDs"
+        },
+        "upgrades": {
+          "type": "object",
+          "description": "Map of vehicle IDs to upgrade levels"
+        },
+        "stats": {
+          "type": "object",
+          "description": "Racing career statistics"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["displayName", "coins", "activeCarId", "unlockedCars"]
+    },
+    "Room": {
+      "title": "Multiplayer Race Room",
+      "description": "Lobby and active race configuration",
+      "type": "object",
+      "properties": {
+        "hostId": {
+          "type": "string",
+          "description": "Host user UID",
+          "maxLength": 128
+        },
+        "code": {
+          "type": "string",
+          "description": "4-character room access code",
+          "maxLength": 8
+        },
+        "trackLength": {
+          "type": "number",
+          "description": "Total track length in meters"
+        },
+        "trackTheme": {
+          "type": "string",
+          "description": "Visual theme of the track",
+          "maxLength": 32
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of race room: waiting, countdown, in_race, finished",
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of room creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["hostId", "code", "trackLength", "trackTheme", "status"]
+    },
+    "RoomPlayer": {
+      "title": "Room Player State",
+      "description": "Realtime positional and status data for a racer in a room",
+      "type": "object",
+      "properties": {
+        "playerId": {
+          "type": "string",
+          "description": "Player UID or bot ID",
+          "maxLength": 128
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Player display name",
+          "maxLength": 64
+        },
+        "carId": {
+          "type": "string",
+          "description": "Chosen vehicle model ID",
+          "maxLength": 32
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex color code",
+          "maxLength": 16
+        },
+        "isHost": {
+          "type": "boolean",
+          "description": "Whether player is room host"
+        },
+        "isReady": {
+          "type": "boolean",
+          "description": "Whether player is ready in lobby"
+        },
+        "x": {
+          "type": "number",
+          "description": "Current X position or lane offset"
+        },
+        "z": {
+          "type": "number",
+          "description": "Current longitudinal distance along track"
+        },
+        "lane": {
+          "type": "number",
+          "description": "Target track lane (0, 1, 2, 3)"
+        },
+        "speed": {
+          "type": "number",
+          "description": "Current speed in km/h or units/s"
+        },
+        "nitroActive": {
+          "type": "boolean",
+          "description": "Whether nitro boost is firing"
+        },
+        "finished": {
+          "type": "boolean",
+          "description": "Whether the player crossed finish line"
+        },
+        "finishTime": {
+          "type": "number",
+          "description": "Finish time in seconds"
+        },
+        "rank": {
+          "type": "number",
+          "description": "Final or current race rank (1-4)"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp of position tick"
+        }
+      },
+      "required": ["playerId", "displayName", "carId", "z", "finished"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile with car garage and coin balance"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Active multiplayer race room"
+    },
+    "/rooms/{roomId}/players/{playerId}": {
+      "schema": { "$ref": "#/entities/RoomPlayer" },
+      "description": "Realtime racer states within a room"
+    }
+  }
+}

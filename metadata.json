@@ -1,0 +1,6 @@
+{
+  "name": "SUP Apex Nitro - 2.5D Multiplayer Arcade Racing",
+  "description": "High-octane 2.5D low-poly arcade multiplayer racing game inspired by SUP Multiplayer Racing. Features real-time rival bumping, slipstream drafting, nitro boosts, vehicle tuning garage, AI bots, and Web Audio synthesizer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

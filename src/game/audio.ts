@@ -42,8 +42,8 @@ class SoundSynthesizer {
     return this.isMuted;
   }
 
-  // Continuous Engine Sound
-  public startEngine() {
+  // Continuous Engine Sound with Vehicle Sound Profiles
+  public startEngine(profile: string = 'f1_scream') {
     if (this.isEngineRunning) return;
     this.initContext();
     if (!this.ctx) return;
@@ -51,20 +51,59 @@ class SoundSynthesizer {
     try {
       const now = this.ctx.currentTime;
 
-      // Primary engine saw oscillator
+      // Primary engine oscillator
       this.engineOsc1 = this.ctx.createOscillator();
-      this.engineOsc1.type = 'sawtooth';
-      this.engineOsc1.frequency.setValueAtTime(55, now); // Low RPM rumble
-
       // Secondary engine sub oscillator
       this.engineOsc2 = this.ctx.createOscillator();
-      this.engineOsc2.type = 'triangle';
-      this.engineOsc2.frequency.setValueAtTime(27.5, now);
+
+      let baseFreq = 55;
+      let filterFreq = 450;
+      let osc1Type: OscillatorType = 'sawtooth';
+      let osc2Type: OscillatorType = 'triangle';
+
+      if (profile === 'f1_scream') {
+        osc1Type = 'sawtooth';
+        osc2Type = 'sawtooth';
+        baseFreq = 110;
+        filterFreq = 950;
+      } else if (profile === 'muscle_rumble') {
+        osc1Type = 'sawtooth';
+        osc2Type = 'square';
+        baseFreq = 42;
+        filterFreq = 380;
+      } else if (profile === 'ev_turbine') {
+        osc1Type = 'sine';
+        osc2Type = 'triangle';
+        baseFreq = 220;
+        filterFreq = 1400;
+      } else if (profile === 'heavy_diesel') {
+        osc1Type = 'sawtooth';
+        osc2Type = 'square';
+        baseFreq = 36;
+        filterFreq = 320;
+      } else if (profile === 'v8_hypercar') {
+        osc1Type = 'sawtooth';
+        osc2Type = 'triangle';
+        baseFreq = 75;
+        filterFreq = 650;
+      } else {
+        // rocket_jet
+        osc1Type = 'sawtooth';
+        osc2Type = 'sine';
+        baseFreq = 90;
+        filterFreq = 800;
+      }
+
+      this.engineOsc1.type = osc1Type;
+      this.engineOsc1.frequency.setValueAtTime(baseFreq, now);
+
+      this.engineOsc2.type = osc2Type;
+      this.engineOsc2.frequency.setValueAtTime(baseFreq * 0.5, now);
 
       // Lowpass filter for engine warmth
       this.engineFilter = this.ctx.createBiquadFilter();
       this.engineFilter.type = 'lowpass';
-      this.engineFilter.frequency.setValueAtTime(450, now);
+      this.engineFilter.frequency.setValueAtTime(filterFreq, now);
       this.engineFilter.Q.setValueAtTime(3, now);
 
       // Engine Master Gain
@@ -84,7 +123,7 @@ class SoundSynthesizer {
     }
   }
 
-  public updateEnginePitch(speedNormalized: number) {
+  public updateEnginePitch(speedNormalized: number, profile: string = 'f1_scream') {
     if (!this.isEngineRunning || !this.ctx || !this.engineOsc1 || !this.engineOsc2 || !this.engineFilter || !this.engineGain) return;
     if (this.isMuted) {
       this.engineGain.gain.setValueAtTime(0, this.ctx.currentTime);
@@ -92,16 +131,48 @@ class SoundSynthesizer {
     }
 
     const now = this.ctx.currentTime;
-    // Map normalized speed [0..1.5] to frequency [55Hz .. 260Hz]
     const clamped = Math.max(0, Math.min(speedNormalized, 1.8));
-    const targetFreq = 55 + clamped * 160;
-    const filterFreq = 380 + clamped * 650;
+
+    let baseFreq = 55;
+    let freqMultiplier = 160;
+    let filterBase = 380;
+    let filterMult = 650;
+
+    if (profile === 'f1_scream') {
+      baseFreq = 110;
+      freqMultiplier = 320;
+      filterBase = 900;
+      filterMult = 1800;
+    } else if (profile === 'muscle_rumble') {
+      baseFreq = 42;
+      freqMultiplier = 110;
+      filterBase = 350;
+      filterMult = 450;
+    } else if (profile === 'ev_turbine') {
+      baseFreq = 220;
+      freqMultiplier = 580;
+      filterBase = 1200;
+      filterMult = 2200;
+    } else if (profile === 'heavy_diesel') {
+      baseFreq = 36;
+      freqMultiplier = 95;
+      filterBase = 300;
+      filterMult = 380;
+    } else if (profile === 'v8_hypercar') {
+      baseFreq = 75;
+      freqMultiplier = 240;
+      filterBase = 600;
+      filterMult = 1100;
+    }
+
+    const targetFreq = baseFreq + clamped * freqMultiplier;
+    const filterFreq = filterBase + clamped * filterMult;
     const targetGain = 0.06 + Math.min(clamped * 0.05, 0.06);
 
-    this.engineOsc1.frequency.setTargetAtTime(targetFreq, now, 0.06);
-    this.engineOsc2.frequency.setTargetAtTime(targetFreq * 0.5, now, 0.06);
-    this.engineFilter.frequency.setTargetAtTime(filterFreq, now, 0.08);
-    this.engineGain.gain.setTargetAtTime(targetGain, now, 0.08);
+    this.engineOsc1.frequency.setTargetAtTime(targetFreq, now, 0.05);
+    this.engineOsc2.frequency.setTargetAtTime(targetFreq * 0.5, now, 0.05);
+    this.engineFilter.frequency.setTargetAtTime(filterFreq, now, 0.07);
+    this.engineGain.gain.setTargetAtTime(targetGain, now, 0.07);
   }
 
   public stopEngine() {

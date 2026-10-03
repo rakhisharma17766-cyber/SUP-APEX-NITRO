@@ -12,8 +12,9 @@ import {
   Zap,
   ArrowUp,
   Disc,
+  Settings,
 } from 'lucide-react';
-import { soundSynth } from '../game/audio';
+import { OrientationMode } from './SettingsModal';
 
 interface GameHUDProps {
   hudState: HudState;
@@ -23,9 +24,11 @@ interface GameHUDProps {
   onNitroToggle: (active: boolean) => void;
   isMuted: boolean;
   onToggleMute: () => void;
+  onOpenSettings: () => void;
   countdown: number | null;
   currentThrottle: number;
   wantsNitro: boolean;
+  orientationMode: OrientationMode;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -36,6 +39,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onNitroToggle,
   isMuted,
   onToggleMute,
+  onOpenSettings,
   countdown,
   currentThrottle,
   wantsNitro,
@@ -54,8 +58,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 md:p-5 overflow-hidden z-20">
-      {/* Top Header: Position Badge, Global Track Progress, and Sound Toggle */}
-      <div className="flex flex-col gap-2 w-full max-w-4xl mx-auto">
+      {/* Top Header: Position Badge, Global Track Progress, Sound & Settings */}
+      <div className="flex flex-col gap-2 w-full max-w-5xl mx-auto">
         <div className="flex items-center justify-between pointer-events-auto">
           {/* Rank Position Badge */}
           <div className="flex items-center gap-3 bg-slate-900/90 backdrop-blur-md border border-cyan-500/40 rounded-2xl px-3.5 py-1.5 shadow-lg">
@@ -83,22 +87,32 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
           </div>
 
-          {/* Keyboard Controls Legend (Desktop) */}
-          <div className="hidden lg:flex items-center gap-2 bg-slate-950/70 border border-slate-800 rounded-full px-4 py-1 text-[11px] text-slate-400 font-semibold backdrop-blur-sm">
-            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-cyan-400">W</kbd> / <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-cyan-400">↑</kbd> Gas</span>
-            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-rose-400">S</kbd> / <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-rose-400">↓</kbd> Brake</span>
-            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-slate-200">A</kbd> / <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-slate-200">D</kbd> Steer</span>
-            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-amber-400">SPACE</kbd> Nitro</span>
+          {/* Desktop Keyboard Controls Legend */}
+          <div className="hidden lg:flex items-center gap-3 bg-slate-950/70 border border-slate-800 rounded-full px-4 py-1 text-[11px] text-slate-300 font-semibold backdrop-blur-sm">
+            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-cyan-400 font-bold">A / ←</kbd> Steer Left</span>
+            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-cyan-400 font-bold">D / →</kbd> Steer Right</span>
+            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-emerald-400 font-bold">W / ↑</kbd> Gas</span>
+            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-rose-400 font-bold">S / ↓</kbd> Brake</span>
+            <span><kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-amber-400 font-bold">SPACE</kbd> Nitro</span>
           </div>
 
-          {/* Sound Toggle */}
-          <button
-            onClick={onToggleMute}
-            className="p-2 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg"
-            title="Toggle Sound"
-          >
-            {isMuted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Volume2 className="w-5 h-5 text-cyan-400" />}
-          </button>
+          {/* Settings & Sound Toggles */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenSettings}
+              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg"
+              title="Settings"
+            >
+              <Settings className="w-5 h-5 text-indigo-400" />
+            </button>
+            <button
+              onClick={onToggleMute}
+              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg"
+              title="Toggle Sound"
+            >
+              {isMuted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Volume2 className="w-5 h-5 text-cyan-400" />}
+            </button>
+          </div>
         </div>
 
         {/* Global Track Progress Bar */}
@@ -115,7 +129,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               style={{ left: `calc(${r.progress}% - 6px)` }}
             >
               <div
-                className={`w-3 h-3 rounded-full border-2 border-white shadow-md ${
+                className={`w-3.5 h-3.5 rounded-full border-2 border-white shadow-md ${
                   r.isPlayer ? 'ring-2 ring-cyan-400 scale-125 z-10' : 'opacity-85'
                 }`}
                 style={{ backgroundColor: r.color }}
@@ -143,66 +157,69 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
       )}
 
-      {/* Center Dynamic Alerts (Drafting, Jump, Stun) */}
+      {/* Center Dynamic Stunt & Race Alerts */}
       <div className="flex flex-col items-center gap-2 pointer-events-none">
         {isAirborne && (
-          <div className="bg-amber-950/90 border border-amber-400/90 px-4 py-1.5 rounded-full text-amber-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_20px_rgba(245,158,11,0.6)] animate-pulse flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400 animate-spin" />
+          <div className="bg-amber-950/90 border border-amber-400/90 px-5 py-2 rounded-full text-amber-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_25px_rgba(245,158,11,0.7)] animate-pulse flex items-center gap-2">
+            <Zap className="w-5 h-5 text-amber-400 animate-spin" />
             <span>AIRBORNE STUNT JUMP!</span>
           </div>
         )}
 
         {onRamp && !isAirborne && (
-          <div className="bg-amber-950/80 border border-amber-500/80 px-4 py-1 rounded-full text-amber-400 font-arcade text-xs tracking-wide animate-pulse">
+          <div className="bg-amber-950/80 border border-amber-500/80 px-4 py-1.5 rounded-full text-amber-400 font-arcade text-xs tracking-wide animate-pulse">
             RAMP ELEVATION CLIMB
           </div>
         )}
 
         {slipstreamActive && (
-          <div className="flex items-center gap-2 bg-cyan-950/85 border border-cyan-400/90 px-4 py-1.5 rounded-full text-cyan-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_20px_rgba(6,182,212,0.6)] animate-pulse">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
+          <div className="flex items-center gap-2 bg-cyan-950/85 border border-cyan-400/90 px-5 py-2 rounded-full text-cyan-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_25px_rgba(6,182,212,0.7)] animate-pulse">
+            <Sparkles className="w-5 h-5 text-cyan-400" />
             <span>SLIPSTREAM DRAFTING +15% TOP SPEED</span>
           </div>
         )}
 
         {stunTimer > 0 && (
-          <div className="flex items-center gap-2 bg-rose-950/90 border border-rose-500 px-4 py-1.5 rounded-full text-rose-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_20px_rgba(244,63,94,0.6)] animate-bounce">
-            <ShieldAlert className="w-4 h-4 text-rose-400" />
+          <div className="flex items-center gap-2 bg-rose-950/90 border border-rose-500 px-5 py-2 rounded-full text-rose-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_25px_rgba(244,63,94,0.7)] animate-bounce">
+            <ShieldAlert className="w-5 h-5 text-rose-400" />
             <span>BUMP IMPACT! STAGGERED</span>
           </div>
         )}
 
         {activeNotification && (
-          <div className="bg-slate-900/95 border border-amber-400 px-5 py-2 rounded-2xl text-amber-300 font-arcade text-xs md:text-sm tracking-wide shadow-2xl animate-pulse">
+          <div className="bg-slate-900/95 border border-amber-400 px-6 py-2.5 rounded-2xl text-amber-300 font-arcade text-xs md:text-sm tracking-wide shadow-2xl animate-pulse">
             {activeNotification}
           </div>
         )}
       </div>
 
-      {/* Bottom Controls Bar: Left Steer | Center Speedometer | Right Gas & Brake & Nitro */}
-      <div className="flex items-end justify-between gap-2 md:gap-4 w-full">
-        {/* Left Side: Steer Left & Right Buttons */}
-        <div className="flex gap-2 pointer-events-auto">
+      {/* Bottom Controls Bar: Accurate Left/Right Steer | Center Speedometer | Gas & Brake & Nitro */}
+      <div className="flex items-end justify-between gap-2 md:gap-6 w-full max-w-5xl mx-auto">
+        {/* Left Side: Accurate Steer Left & Right Buttons */}
+        <div className="flex gap-2.5 pointer-events-auto">
+          {/* Steer Left Button */}
           <button
             onPointerDown={() => onLaneShift(-1)}
-            className="w-14 h-14 md:w-18 md:h-18 rounded-2xl bg-slate-900/90 active:bg-cyan-600/50 border border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-200 active:text-cyan-300 transition-transform active:scale-90 shadow-xl"
+            className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-900/95 active:bg-cyan-600/60 border-2 border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-100 active:text-cyan-300 transition-transform active:scale-90 shadow-2xl"
             aria-label="Steer Left"
           >
-            <ChevronLeft className="w-8 h-8" />
-            <span className="text-[9px] font-bold text-slate-400">LEFT</span>
+            <ChevronLeft className="w-9 h-9 stroke-[2.5]" />
+            <span className="text-[10px] font-arcade font-bold text-slate-300">LEFT</span>
           </button>
+
+          {/* Steer Right Button */}
           <button
             onPointerDown={() => onLaneShift(1)}
-            className="w-14 h-14 md:w-18 md:h-18 rounded-2xl bg-slate-900/90 active:bg-cyan-600/50 border border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-200 active:text-cyan-300 transition-transform active:scale-90 shadow-xl"
+            className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-900/95 active:bg-cyan-600/60 border-2 border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-100 active:text-cyan-300 transition-transform active:scale-90 shadow-2xl"
             aria-label="Steer Right"
           >
-            <ChevronRight className="w-8 h-8" />
-            <span className="text-[9px] font-bold text-slate-400">RIGHT</span>
+            <ChevronRight className="w-9 h-9 stroke-[2.5]" />
+            <span className="text-[10px] font-arcade font-bold text-slate-300">RIGHT</span>
           </button>
         </div>
 
         {/* Center: Digital Speedometer & Nitro Tank */}
-        <div className="flex items-center gap-3 bg-slate-900/90 backdrop-blur-lg border border-slate-700/80 rounded-3xl px-3.5 py-2.5 shadow-2xl pointer-events-auto">
+        <div className="flex items-center gap-3.5 bg-slate-900/95 backdrop-blur-lg border border-slate-700 rounded-3xl px-4 py-2.5 shadow-2xl pointer-events-auto">
           {/* Speedometer */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-bold text-slate-400 tracking-wider">SPEED</span>
@@ -235,12 +252,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           {/* Nitro Vertical Gauge */}
           <div className="flex flex-col items-center gap-1">
-            <Flame className={`w-3.5 h-3.5 ${wantsNitro ? 'text-cyan-300 animate-bounce' : 'text-slate-500'}`} />
-            <div className="w-3 h-12 md:h-14 bg-slate-950 rounded-full border border-slate-700 relative overflow-hidden flex flex-col justify-end">
+            <Flame className={`w-4 h-4 ${wantsNitro ? 'text-cyan-300 animate-bounce' : 'text-slate-500'}`} />
+            <div className="w-3.5 h-12 md:h-14 bg-slate-950 rounded-full border border-slate-700 relative overflow-hidden flex flex-col justify-end">
               <div
                 className={`w-full rounded-full transition-all duration-75 ${
                   wantsNitro
-                    ? 'bg-gradient-to-t from-cyan-400 to-indigo-400 shadow-[0_0_10px_#06b6d4]'
+                    ? 'bg-gradient-to-t from-cyan-400 to-indigo-400 shadow-[0_0_12px_#06b6d4]'
                     : 'bg-cyan-500'
                 }`}
                 style={{ height: `${nitroPercent}%` }}
@@ -250,21 +267,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Real Acceleration (Gas), Brake & Nitro Buttons */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        {/* Right Side: Acceleration (Gas), Brake & Nitro Buttons */}
+        <div className="flex items-center gap-2.5 pointer-events-auto">
           {/* Brake Button */}
           <button
             onPointerDown={() => onThrottleChange(-1)}
             onPointerUp={() => onThrottleChange(0)}
             onPointerLeave={() => onThrottleChange(0)}
-            className={`w-13 h-13 md:w-16 md:h-16 rounded-2xl flex flex-col items-center justify-center gap-0.5 border transition-all active:scale-90 shadow-xl ${
+            className={`w-14 h-14 md:w-17 md:h-17 rounded-2xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-90 shadow-2xl ${
               currentThrottle < 0
-                ? 'bg-rose-600 border-rose-300 text-white shadow-[0_0_15px_#f43f5e]'
-                : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700 text-rose-400'
+                ? 'bg-rose-600 border-rose-300 text-white shadow-[0_0_18px_#f43f5e]'
+                : 'bg-slate-900/95 hover:bg-slate-800 border-slate-700 text-rose-400'
             }`}
             aria-label="Brake"
           >
-            <Disc className="w-5 h-5" />
+            <Disc className="w-6 h-6" />
             <span className="text-[9px] font-arcade font-bold">BRAKE</span>
           </button>
 
@@ -273,35 +290,32 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             onPointerDown={() => onThrottleChange(1)}
             onPointerUp={() => onThrottleChange(0)}
             onPointerLeave={() => onThrottleChange(0)}
-            className={`w-15 h-15 md:w-18 md:h-18 rounded-2xl flex flex-col items-center justify-center gap-0.5 border transition-all active:scale-90 shadow-xl ${
+            className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-90 shadow-2xl ${
               currentThrottle > 0
-                ? 'bg-gradient-to-t from-emerald-600 to-teal-500 border-emerald-300 text-white shadow-[0_0_18px_#10b981]'
-                : 'bg-slate-900/90 hover:bg-slate-800 border-slate-700 text-emerald-400'
+                ? 'bg-gradient-to-t from-emerald-600 to-teal-500 border-emerald-300 text-white shadow-[0_0_20px_#10b981]'
+                : 'bg-slate-900/95 hover:bg-slate-800 border-slate-700 text-emerald-400'
             }`}
             aria-label="Accelerate Gas"
           >
-            <ArrowUp className="w-6 h-6 stroke-[3]" />
+            <ArrowUp className="w-7 h-7 stroke-[3]" />
             <span className="text-[10px] font-arcade font-bold">GAS</span>
           </button>
 
           {/* Nitro Activation Button */}
           <button
-            onPointerDown={() => {
-              onNitroToggle(true);
-              soundSynth.playNitroBoost();
-            }}
+            onPointerDown={() => onNitroToggle(true)}
             onPointerUp={() => onNitroToggle(false)}
             onPointerLeave={() => onNitroToggle(false)}
-            className={`w-15 h-15 md:w-18 md:h-18 rounded-2xl font-arcade font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 shadow-xl border-2 ${
+            className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl font-arcade font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 shadow-2xl border-2 ${
               wantsNitro
                 ? 'bg-gradient-to-br from-cyan-400 to-indigo-600 border-white text-white neon-glow-cyan'
                 : nitroPercent > 5
-                ? 'bg-gradient-to-br from-cyan-600/90 to-blue-700/90 border-cyan-400/60 text-white hover:brightness-110'
+                ? 'bg-gradient-to-br from-cyan-600/95 to-blue-700/95 border-cyan-400/80 text-white hover:brightness-110'
                 : 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
             }`}
             aria-label="Nitro Boost"
           >
-            <Zap className={`w-5 h-5 ${wantsNitro ? 'animate-spin' : ''}`} />
+            <Zap className={`w-6 h-6 ${wantsNitro ? 'animate-spin' : ''}`} />
             <span className="text-[10px] tracking-wider">NITRO</span>
           </button>
         </div>

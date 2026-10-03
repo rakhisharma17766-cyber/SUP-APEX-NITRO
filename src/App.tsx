@@ -25,6 +25,7 @@ import { GarageMenu } from './components/GarageMenu';
 import { TuningAdvisorModal } from './components/TuningAdvisorModal';
 import { MultiplayerLobbyModal } from './components/MultiplayerLobbyModal';
 import { RaceFinishedModal } from './components/RaceFinishedModal';
+import { SettingsModal, OrientationMode } from './components/SettingsModal';
 import { soundSynth } from './game/audio';
 
 type GameMode = 'garage' | 'racing' | 'finished';
@@ -54,6 +55,10 @@ export default function App() {
   // Modals
   const [showTuningAdvisor, setShowTuningAdvisor] = useState<boolean>(false);
   const [showMultiplayerLobby, setShowMultiplayerLobby] = useState<boolean>(false);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+
+  // Orientation Mode: 'auto' | 'landscape' | 'portrait'
+  const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
 
   // Active Racers & Physics Engine
   const [trackData, setTrackData] = useState<TrackData | null>(null);
@@ -65,7 +70,7 @@ export default function App() {
   // Input states (Stable Ref read inside GameCanvas 60 FPS loop)
   const inputRef = useRef<{
     throttle: number; // 1: gas, -1: brake, 0: coast
-    targetLane: number; // 0..3
+    targetLane: number; // 0..3 (0: Leftmost on screen, 3: Rightmost on screen)
     wantsNitro: boolean;
   }>({
     throttle: 1, // Default forward drive
@@ -217,7 +222,7 @@ export default function App() {
 
       playerEntityRef.current = player;
       inputRef.current = {
-        throttle: 1, // Start accelerating on green
+        throttle: 1, // Drive on green
         targetLane: 1,
         wantsNitro: false,
       };
@@ -275,16 +280,16 @@ export default function App() {
     initializeRace(length, theme, roomId);
   };
 
-  // Keyboard Controls Listener (WASD & Arrow Keys & Space)
+  // Keyboard Controls Listener (Accurate Left & Right)
   useEffect(() => {
     if (gameMode !== 'racing') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Steer Left
+      // Steer Left (Moves towards Lane 0: Left on screen)
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         inputRef.current.targetLane = Math.max(0, inputRef.current.targetLane - 1);
       }
-      // Steer Right
+      // Steer Right (Moves towards Lane 3: Right on screen)
       else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         inputRef.current.targetLane = Math.min(3, inputRef.current.targetLane + 1);
       }
@@ -441,7 +446,9 @@ export default function App() {
     }, 1800);
   };
 
-  // On-Screen Touch / Button Handlers
+  // Accurate On-Screen Touch / Button Handlers
+  // direction === -1: Left (targetLane - 1)
+  // direction === 1: Right (targetLane + 1)
   const handleLaneShift = (direction: -1 | 1) => {
     inputRef.current.targetLane = Math.max(0, Math.min(3, inputRef.current.targetLane + direction));
   };
@@ -462,8 +469,8 @@ export default function App() {
   };
 
   return (
-    <div className="relative w-screen h-screen max-h-screen overflow-hidden bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* 1. Main Garage View */}
+    <div className="relative w-screen min-h-screen bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* 1. Main Garage View (Clean, Scrollable, Professional) */}
       {gameMode === 'garage' && (
         <GarageMenu
           user={currentUser}
@@ -474,6 +481,7 @@ export default function App() {
           onStartSoloRace={handleStartSoloRace}
           onOpenMultiplayer={() => setShowMultiplayerLobby(true)}
           onOpenAiChief={() => setShowTuningAdvisor(true)}
+          onOpenSettings={() => setShowSettings(true)}
           onSignIn={handleSignIn}
           onSignOut={handleSignOut}
           isMuted={isAudioMuted}
@@ -481,34 +489,46 @@ export default function App() {
         />
       )}
 
-      {/* 2. Active 3D Race View */}
+      {/* 2. Active 3D Race View with Orientation Framing */}
       {gameMode === 'racing' && trackData && playerEntityRef.current && physicsEngineRef.current && (
-        <div className="relative w-full h-full">
-          <GameCanvas
-            track={trackData}
-            playerEntity={playerEntityRef.current}
-            botDrivers={botDriversRef.current}
-            opponentRacersMap={opponentRacersRef.current}
-            physics={physicsEngineRef.current}
-            inputRef={inputRef}
-            onHudUpdate={setHudState}
-            onCollisionEvent={handleCollisionEvent}
-            onRaceFinished={() => setGameMode('finished')}
-            countdown={countdown}
-          />
+        <div className="w-screen h-screen flex items-center justify-center bg-slate-950 overflow-hidden">
+          <div
+            className={`relative overflow-hidden transition-all duration-300 ${
+              orientationMode === 'landscape'
+                ? 'w-full max-w-[177.78vh] aspect-video max-h-screen shadow-2xl rounded-none md:rounded-3xl border border-slate-800'
+                : orientationMode === 'portrait'
+                ? 'h-full max-h-[177.78vw] aspect-[9/16] max-w-screen shadow-2xl rounded-none md:rounded-3xl border border-slate-800'
+                : 'w-full h-full'
+            }`}
+          >
+            <GameCanvas
+              track={trackData}
+              playerEntity={playerEntityRef.current}
+              botDrivers={botDriversRef.current}
+              opponentRacersMap={opponentRacersRef.current}
+              physics={physicsEngineRef.current}
+              inputRef={inputRef}
+              onHudUpdate={setHudState}
+              onCollisionEvent={handleCollisionEvent}
+              onRaceFinished={() => setGameMode('finished')}
+              countdown={countdown}
+            />
 
-          <GameHUD
-            hudState={hudState}
-            activeNotification={activeNotification}
-            onLaneShift={handleLaneShift}
-            onThrottleChange={handleThrottleChange}
-            onNitroToggle={handleNitroToggle}
-            isMuted={isAudioMuted}
-            onToggleMute={handleToggleMute}
-            countdown={countdown}
-            currentThrottle={currentThrottle}
-            wantsNitro={wantsNitroState}
-          />
+            <GameHUD
+              hudState={hudState}
+              activeNotification={activeNotification}
+              onLaneShift={handleLaneShift}
+              onThrottleChange={handleThrottleChange}
+              onNitroToggle={handleNitroToggle}
+              isMuted={isAudioMuted}
+              onToggleMute={handleToggleMute}
+              onOpenSettings={() => setShowSettings(true)}
+              countdown={countdown}
+              currentThrottle={currentThrottle}
+              wantsNitro={wantsNitroState}
+              orientationMode={orientationMode}
+            />
+          </div>
         </div>
       )}
 
@@ -546,6 +566,17 @@ export default function App() {
           activeCarId={garageData.activeCarId || 'red_storm'}
           onStartMultiplayerRace={handleStartMultiplayerRace}
           onClose={() => setShowMultiplayerLobby(false)}
+        />
+      )}
+
+      {/* Settings Modal (Landscape/Portrait, Audio, Fullscreen) */}
+      {showSettings && (
+        <SettingsModal
+          orientationMode={orientationMode}
+          onSetOrientationMode={setOrientationMode}
+          isMuted={isAudioMuted}
+          onToggleMute={handleToggleMute}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>

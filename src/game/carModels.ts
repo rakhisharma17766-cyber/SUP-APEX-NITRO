@@ -258,7 +258,7 @@ export function createCarModel(
   // ==========================================
   // CAR 3: "NITRO APEX"
   // ==========================================
-  else {
+  else if (carId === 'nitro_apex') {
     // Sleek Hypercar Fuselage
     const fuseGeo = new THREE.BoxGeometry(1.85, 0.5, 3.8);
     const fuse = new THREE.Mesh(fuseGeo, bodyMat);
@@ -317,6 +317,142 @@ export function createCarModel(
     // Twin High-Power Nitro Thruster Plumes
     addExhaust(-0.5, 0.7, -2.1);
     addExhaust(0.5, 0.7, -2.1);
+  }
+
+  // ==========================================
+  // CAR 4: "PHANTOM GT HYPERCAR"
+  // ==========================================
+  else if (carId === 'phantom_gt') {
+    // Ultra-low sculpted monocoque
+    const monoGeo = new THREE.BoxGeometry(1.95, 0.45, 4.2);
+    const monocoque = new THREE.Mesh(monoGeo, bodyMat);
+    monocoque.position.set(0, 0.48, 0);
+    rootGroup.add(monocoque);
+    disposables.push({ geometry: monoGeo });
+
+    // Le Mans Shark Fin along the spine
+    const finGeo = new THREE.BoxGeometry(0.08, 0.75, 2.2);
+    const sharkFin = new THREE.Mesh(finGeo, accentMat);
+    sharkFin.position.set(0, 1.1, -0.6);
+    rootGroup.add(sharkFin);
+    disposables.push({ geometry: finGeo });
+
+    // Low-slung cockpit dome
+    const domeGeo = new THREE.BoxGeometry(1.2, 0.4, 1.9);
+    const dome = new THREE.Mesh(domeGeo, glassMat);
+    dome.position.set(0, 0.82, 0.2);
+    rootGroup.add(dome);
+    disposables.push({ geometry: domeGeo });
+
+    // Massive swan-neck rear wing
+    const wingGeo = new THREE.BoxGeometry(2.5, 0.08, 0.8);
+    const wing = new THREE.Mesh(wingGeo, accentMat);
+    wing.position.set(0, 1.25, -2.0);
+    rootGroup.add(wing);
+    disposables.push({ geometry: wingGeo });
+
+    // Quad carbon diffuser exhausts
+    addExhaust(-0.35, 0.38, -2.1);
+    addExhaust(-0.12, 0.38, -2.1);
+    addExhaust(0.12, 0.38, -2.1);
+    addExhaust(0.35, 0.38, -2.1);
+
+    // Wide Michelin racing slick wheels
+    addWheel(-1.05, 0.5, 1.4, 0.5, 0.5);
+    addWheel(1.05, 0.5, 1.4, 0.5, 0.5);
+    addWheel(-1.1, 0.55, -1.4, 0.55, 0.58);
+    addWheel(1.1, 0.55, -1.4, 0.55, 0.58);
+  }
+
+  // ==========================================
+  // CAR 5: "VORTEX EV PROTOTYPE"
+  // ==========================================
+  else if (carId === 'vortex_electric') {
+    // Angular Faceted Wedge Chassis
+    const evGeo = new THREE.BoxGeometry(1.9, 0.52, 3.9);
+    const evBody = new THREE.Mesh(evGeo, bodyMat);
+    evBody.position.set(0, 0.52, 0);
+    rootGroup.add(evBody);
+    disposables.push({ geometry: evGeo });
+
+    // Glowing Neon Edge Accents
+    const neonEdgeMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+    const sideStripGeo = new THREE.BoxGeometry(0.08, 0.15, 3.6);
+    const leftStrip = new THREE.Mesh(sideStripGeo, neonEdgeMat);
+    leftStrip.position.set(-0.96, 0.5, 0);
+    const rightStrip = new THREE.Mesh(sideStripGeo, neonEdgeMat);
+    rightStrip.position.set(0.96, 0.5, 0);
+    rootGroup.add(leftStrip, rightStrip);
+    disposables.push({ geometry: sideStripGeo, material: neonEdgeMat });
+
+    // Seamless Jet Fighter Glass Canopy
+    const canopyGeo = new THREE.ConeGeometry(0.8, 2.5, 6);
+    canopyGeo.rotateX(Math.PI / 2);
+    canopyGeo.scale(1.2, 0.45, 1.0);
+    const canopy = new THREE.Mesh(canopyGeo, glassMat);
+    canopy.position.set(0, 0.88, 0.3);
+    rootGroup.add(canopy);
+    disposables.push({ geometry: canopyGeo });
+
+    // Active Split Airbrake Fin
+    const airbrakeGeo = new THREE.BoxGeometry(1.8, 0.08, 0.7);
+    const airbrake = new THREE.Mesh(airbrakeGeo, blackMat);
+    airbrake.position.set(0, 0.95, -1.8);
+    rootGroup.add(airbrake);
+    disposables.push({ geometry: airbrakeGeo });
+
+    // Dual Plasma Overcharger Nozzles
+    addExhaust(-0.4, 0.5, -1.95);
+    addExhaust(0.4, 0.5, -1.95);
+
+    // Aero-Turbine Disc Wheels
+    addWheel(-1.0, 0.52, 1.3, 0.52, 0.45);
+    addWheel(1.0, 0.52, 1.3, 0.52, 0.45);
+    addWheel(-1.02, 0.54, -1.3, 0.54, 0.48);
+    addWheel(1.02, 0.54, -1.3, 0.54, 0.48);
+  }
+
+  // ==========================================
+  // CAR 6: "TITAN TROPHY CRUSHER"
+  // ==========================================
+  else {
+    // High-Ground Clearance Heavy Truck Bed & Cab
+    const cabGeo = new THREE.BoxGeometry(2.1, 0.9, 2.2);
+    const cab = new THREE.Mesh(cabGeo, bodyMat);
+    cab.position.set(0, 1.1, 0.3);
+    rootGroup.add(cab);
+    disposables.push({ geometry: cabGeo });
+
+    // Open Rear Truck Bed
+    const bedGeo = new THREE.BoxGeometry(2.0, 0.5, 1.8);
+    const bed = new THREE.Mesh(bedGeo, blackMat);
+    bed.position.set(0, 0.85, -1.5);
+    rootGroup.add(bed);
+    disposables.push({ geometry: bedGeo });
+
+    // Heavy Tubular Steel Roll Cage
+    const cageGeo = new THREE.BoxGeometry(2.05, 0.08, 1.7);
+    const cage = new THREE.Mesh(cageGeo, accentMat);
+    cage.position.set(0, 1.6, 0.3);
+    rootGroup.add(cage);
+    disposables.push({ geometry: cageGeo });
+
+    // Heavy Stinger Bumper with D-Rings
+    const bumperGeo = new THREE.BoxGeometry(2.3, 0.55, 0.5);
+    const bumper = new THREE.Mesh(bumperGeo, blackMat);
+    bumper.position.set(0, 0.7, 1.75);
+    rootGroup.add(bumper);
+    disposables.push({ geometry: bumperGeo });
+
+    // Massive Off-Road Knobby All-Terrain Wheels (0.8m diameter)
+    addWheel(-1.25, 0.75, 1.3, 0.75, 0.65);
+    addWheel(1.25, 0.75, 1.3, 0.75, 0.65);
+    addWheel(-1.25, 0.78, -1.4, 0.78, 0.68);
+    addWheel(1.25, 0.78, -1.4, 0.78, 0.68);
+
+    // Dual Stacked Truck Exhaust Pipes
+    addExhaust(-0.7, 1.4, -0.6);
+    addExhaust(0.7, 1.4, -0.6);
   }
 
   // Forward Headlights

@@ -73,7 +73,7 @@ export class PhysicsEngine {
       const step = Math.sign(dx) * Math.min(Math.abs(dx), lateralSpeed * delta);
       racer.currentX += step;
       // Banking roll angle into the lane switch
-      const targetRoll = -Math.sign(dx) * 0.16;
+      const targetRoll = Math.sign(dx) * 0.16;
       racer.rollAngle += (targetRoll - racer.rollAngle) * 0.2;
     } else {
       racer.currentX = targetLaneX;

@@ -84,7 +84,7 @@ export interface TrackData {
   getTrackCenter: (z: number) => { x: number; y: number; pitch: number; yaw: number };
 }
 
-export const LANE_X_COORDS = [-4.5, -1.5, 1.5, 4.5];
+export const LANE_X_COORDS = [4.5, 1.5, -1.5, -4.5];
 
 export function generateTrackData(
   totalLengthMeters: number,

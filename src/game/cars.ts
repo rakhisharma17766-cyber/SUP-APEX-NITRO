@@ -1,11 +1,28 @@
 // Vehicle Configurations, Physics Constants, and Upgrade Formulas
 
+export type VehicleCategory =
+  | 'Speed & Agility'
+  | 'Heavy Brawler'
+  | 'Nitro Overcharger'
+  | 'Le Mans Hypercar'
+  | 'Electric Prototype'
+  | 'Monster Off-Roader';
+
+export type SoundProfile =
+  | 'f1_scream'
+  | 'muscle_rumble'
+  | 'rocket_jet'
+  | 'v8_hypercar'
+  | 'ev_turbine'
+  | 'heavy_diesel';
+
 export interface VehicleDefinition {
   id: string;
   name: string;
   tagline: string;
   description: string;
-  category: 'Speed & Agility' | 'Heavy Brawler' | 'Nitro Overcharger';
+  category: VehicleCategory;
+  soundProfile: SoundProfile;
   unlockPrice: number;
   primaryColor: string;
   accentColor: string;
@@ -23,10 +40,11 @@ export const VEHICLES: Record<string, VehicleDefinition> = {
   red_storm: {
     id: 'red_storm',
     name: 'Red Storm F1',
-    tagline: 'Hyper-Aero Speed Demon',
+    tagline: 'Hyper-Aero Open-Wheel Demon',
     description: 'Ultra-lightweight open-wheel chassis engineered for blinding acceleration and laser-sharp lane switches.',
     category: 'Speed & Agility',
-    unlockPrice: 0, // Default starter car
+    soundProfile: 'f1_scream',
+    unlockPrice: 0, // Starter car
     primaryColor: '#ef4444',
     accentColor: '#ffffff',
     glowColor: '#f87171',
@@ -44,7 +62,8 @@ export const VEHICLES: Record<string, VehicleDefinition> = {
     tagline: 'Titanium Bumper Juggernaut',
     description: 'Armored angular heavy-duty muscle car with reinforced ramming cowls that sends rivals flying sideways on impact.',
     category: 'Heavy Brawler',
-    unlockPrice: 1200,
+    soundProfile: 'muscle_rumble',
+    unlockPrice: 1000,
     primaryColor: '#eab308',
     accentColor: '#1e293b',
     glowColor: '#fde047',
@@ -59,10 +78,11 @@ export const VEHICLES: Record<string, VehicleDefinition> = {
   nitro_apex: {
     id: 'nitro_apex',
     name: 'Nitro Apex',
-    tagline: 'Twin-Turbine Rocket',
+    tagline: 'Twin-Turbine Jet Cruiser',
     description: 'Futuristic hyper-cruiser equipped with dual compressed-plasma tanks for extended, earth-shattering nitro burn.',
     category: 'Nitro Overcharger',
-    unlockPrice: 2500,
+    soundProfile: 'rocket_jet',
+    unlockPrice: 2200,
     primaryColor: '#06b6d4',
     accentColor: '#8b5cf6',
     glowColor: '#38bdf8',
@@ -71,7 +91,64 @@ export const VEHICLES: Record<string, VehicleDefinition> = {
       acceleration: 7.2,
       heavyArmor: 5.0,
       nitroDuration: 4.8,
-      nitroPower: 1.5,
+      nitroPower: 1.55,
+    },
+  },
+  phantom_gt: {
+    id: 'phantom_gt',
+    name: 'Phantom GT Hypercar',
+    tagline: 'Le Mans V8 Carbon Monster',
+    description: 'Sleek carbon-monocoque endurance prototype with active ground-effect diffusers, dominating straightaways at supreme top velocity.',
+    category: 'Le Mans Hypercar',
+    soundProfile: 'v8_hypercar',
+    unlockPrice: 3500,
+    primaryColor: '#a855f7',
+    accentColor: '#f43f5e',
+    glowColor: '#c084fc',
+    baseStats: {
+      topSpeed: 185,
+      acceleration: 8.8,
+      heavyArmor: 5.5,
+      nitroDuration: 3.2,
+      nitroPower: 1.45,
+    },
+  },
+  vortex_electric: {
+    id: 'vortex_electric',
+    name: 'Vortex EV Prototype',
+    tagline: 'Instant Torque Lightning Hypercar',
+    description: 'Quad-motor electric hypercar delivering explosive instant wheel torque, catapulting from 0 to top speed in an eye-blink.',
+    category: 'Electric Prototype',
+    soundProfile: 'ev_turbine',
+    unlockPrice: 4800,
+    primaryColor: '#10b981',
+    accentColor: '#06b6d4',
+    glowColor: '#34d399',
+    baseStats: {
+      topSpeed: 172,
+      acceleration: 9.8,
+      heavyArmor: 6.0,
+      nitroDuration: 3.0,
+      nitroPower: 1.4,
+    },
+  },
+  titan_crusher: {
+    id: 'titan_crusher',
+    name: 'Titan Trophy Crusher',
+    tagline: 'Steel-Cage Heavy Bumper Rig',
+    description: 'Colossal off-road trophy rig with double shock suspension and hardened push-bars designed to crush through any traffic gridlock.',
+    category: 'Monster Off-Roader',
+    soundProfile: 'heavy_diesel',
+    unlockPrice: 4200,
+    primaryColor: '#f97316',
+    accentColor: '#172554',
+    glowColor: '#fb923c',
+    baseStats: {
+      topSpeed: 148,
+      acceleration: 6.8,
+      heavyArmor: 10.0,
+      nitroDuration: 3.8,
+      nitroPower: 1.35,
     },
   },
 };
@@ -90,101 +167,87 @@ export const UPGRADES_META: UpgradeMeta[] = [
   {
     key: 'topSpeed',
     name: 'Twin-Turbo Engine',
-    description: 'Increases top linear velocity (km/h) across the entire straightaway.',
+    description: 'Increases top linear velocity (km/h) across the straightaway.',
     icon: 'gauge',
     maxLevel: 5,
   },
   {
     key: 'acceleration',
     name: 'Torque Transmission',
-    description: 'Reduces time needed to reach peak speed and recovers quickly after bumping.',
+    description: 'Reduces time to reach peak speed and recovers quickly after collisions.',
     icon: 'zap',
     maxLevel: 5,
   },
   {
     key: 'heavyArmor',
-    name: 'Reinforced Ram Armor',
-    description: 'Increases collision mass, shoving lighter cars outward without loss of velocity.',
+    name: 'Heavy Ramming Bumper',
+    description: 'Increases vehicle mass and lateral shove distance when bumping opponents.',
     icon: 'shield',
     maxLevel: 5,
   },
   {
     key: 'nitroDuration',
-    name: 'Plasma Tank Capacity',
-    description: 'Extends continuous burn duration of each nitro blast.',
-    icon: 'flame',
+    name: 'Overcharged Fuel Cell',
+    description: 'Expands nitro fuel capacity, sustaining longer continuous boost times.',
+    icon: 'battery-charging',
     maxLevel: 5,
   },
   {
     key: 'nitroPower',
-    name: 'Supercharged Injector',
-    description: 'Amps up the maximum speed multiplier when nitro is engaged.',
-    icon: 'rocket',
+    name: 'Afterburner Injector',
+    description: 'Increases top speed multiplier while burning nitro boost.',
+    icon: 'flame',
     maxLevel: 5,
   },
 ];
 
-// Price calculation per upgrade level
-export function getUpgradeCost(level: number): number {
-  // Level 1 -> 2: 250
-  // Level 2 -> 3: 500
-  // Level 3 -> 4: 900
-  // Level 4 -> 5: 1400
-  const costs = [0, 250, 500, 900, 1400, 2000];
-  return costs[level] || 2000;
+export const UPGRADE_BASE_COSTS: Record<number, number> = {
+  1: 150,
+  2: 300,
+  3: 650,
+  4: 1200,
+  5: 2200,
+};
+
+export function getUpgradeCost(currentLevel: number): number {
+  return UPGRADE_BASE_COSTS[currentLevel] || 500;
 }
 
-// Active dynamic physics variables calculation
 export interface ActivePhysicsStats {
-  maxSpeedUnitsPerSec: number; // In Three.js units/sec (e.g. 55-90)
-  maxSpeedKmh: number; // Displayed in speedometer
-  accelerationRate: number; // units/sec^2
+  maxSpeedUnitsPerSec: number;
+  maxSpeedKmh: number;
+  accelerationRate: number;
   dragCoefficient: number;
-  armorWeight: number; // 1.0 to 3.0 mass multiplier
+  armorWeight: number;
   bumpKnockbackPower: number;
-  nitroDurationSeconds: number; // 2.5 to 5.5s
-  nitroSpeedMultiplier: number; // 1.3 to 1.6x
-  nitroRefillRate: number; // percent per second
+  nitroDurationSeconds: number;
+  nitroSpeedMultiplier: number;
+  nitroRefillRate: number;
 }
 
 export function computePhysicsStats(
   carId: string,
-  upgradeLevels: { [key in UpgradeKey]?: number } = {}
+  upgrades: { [key: string]: number } = {}
 ): ActivePhysicsStats {
-  const car = VEHICLES[carId] || VEHICLES.red_storm;
-  const topSpeedLvl = upgradeLevels.topSpeed || 1;
-  const accelLvl = upgradeLevels.acceleration || 1;
-  const armorLvl = upgradeLevels.heavyArmor || 1;
-  const nitroDurLvl = upgradeLevels.nitroDuration || 1;
-  const nitroPwrLvl = upgradeLevels.nitroPower || 1;
+  const def = VEHICLES[carId] || VEHICLES.red_storm;
+  const topSpeedLvl = upgrades.topSpeed || 1;
+  const accelLvl = upgrades.acceleration || 1;
+  const armorLvl = upgrades.heavyArmor || 1;
+  const nitroDurLvl = upgrades.nitroDuration || 1;
+  const nitroPowLvl = upgrades.nitroPower || 1;
 
-  // Real Stat Scaling
-  const baseKmh = car.baseStats.topSpeed;
-  const maxSpeedKmh = Math.round(baseKmh + (topSpeedLvl - 1) * 12);
-  // Scale km/h to Three.js track units/sec: 180 km/h approx 60 units/sec
-  const maxSpeedUnitsPerSec = (maxSpeedKmh / 180) * 60;
-
-  // Acceleration: higher level -> reaches peak speed faster
-  const baseAccel = car.baseStats.acceleration;
-  const accelerationRate = 28 + (baseAccel + accelLvl * 1.5) * 2.8;
-
-  // Armor Weight: scales bump impulse
-  const baseArmor = car.baseStats.heavyArmor;
-  const armorWeight = 1.0 + (baseArmor / 10) * 0.8 + (armorLvl - 1) * 0.25;
-  const bumpKnockbackPower = 6.0 + (baseArmor + armorLvl * 2) * 0.8;
-
-  // Nitro
-  const baseNitroDur = car.baseStats.nitroDuration;
-  const nitroDurationSeconds = baseNitroDur + (nitroDurLvl - 1) * 0.55;
-
-  const baseNitroPwr = car.baseStats.nitroPower;
-  const nitroSpeedMultiplier = baseNitroPwr + (nitroPwrLvl - 1) * 0.06;
-
-  const nitroRefillRate = 0.12 + (nitroPwrLvl - 1) * 0.03; // ~12-24% per sec
+  const effectiveTopSpeedKmh = def.baseStats.topSpeed + (topSpeedLvl - 1) * 8;
+  const maxSpeedUnitsPerSec = (effectiveTopSpeedKmh / 180) * 58;
+  const accelerationRate = 28 + (def.baseStats.acceleration + (accelLvl - 1) * 1.5) * 2.2;
+  const armorWeight = (def.baseStats.heavyArmor + (armorLvl - 1) * 1.4) * 0.22;
+  const bumpKnockbackPower = 5.0 + armorWeight * 3.5;
+  const nitroDurationSeconds = def.baseStats.nitroDuration + (nitroDurLvl - 1) * 0.6;
+  const nitroSpeedMultiplier = def.baseStats.nitroPower + (nitroPowLvl - 1) * 0.06;
+  const nitroRefillRate = 0.08 + (nitroDurLvl - 1) * 0.015;
 
   return {
     maxSpeedUnitsPerSec,
-    maxSpeedKmh,
+    maxSpeedKmh: Math.round(effectiveTopSpeedKmh),
     accelerationRate,
     dragCoefficient: 0.985,
     armorWeight,

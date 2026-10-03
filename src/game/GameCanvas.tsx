@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { TrackData, buildTrackScene } from './trackGenerator';
 import { RacerEntity, PhysicsEngine, CollisionEvent } from './physics';
 import { createCarModel, updateCarAnimation, disposeCarModel, CarModelInstance } from './carModels';
+import { VEHICLES } from './cars';
 import { soundSynth } from './audio';
 import { BotDriver, updateBotAI } from './aiBots';
 
@@ -190,8 +191,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     camera.position.set(pCenterInit.x, pCenterInit.y + 6, playerEntity.currentZ - 9);
     camera.lookAt(pCenterInit.x, pCenterInit.y + 1, playerEntity.currentZ + 10);
 
-    // Start Procedural Engine Audio
-    soundSynth.startEngine();
+    // Start Procedural Engine Audio with Car Sound Profile
+    const carSoundProfile = VEHICLES[playerEntity.carId]?.soundProfile || 'f1_scream';
+    soundSynth.startEngine(carSoundProfile);
 
     // 7. Render & Simulation Loop
     let lastTime = performance.now();
@@ -255,7 +257,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // E. Update Engine Audio Pitch
         const normalizedSpeed = playerEntity.speed / 50;
-        soundSynth.updateEnginePitch(normalizedSpeed);
+        soundSynth.updateEnginePitch(normalizedSpeed, carSoundProfile);
 
         // F. Check Race Finish
         if (playerEntity.finished && !hasAnnouncedFinish) {

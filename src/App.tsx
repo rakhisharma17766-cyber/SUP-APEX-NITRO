@@ -18,8 +18,8 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { VEHICLES, computePhysicsStats, UpgradeKey } from './game/cars';
 import { TrackThemeId, generateTrackData, TrackData, LANE_X_COORDS } from './game/trackGenerator';
 import { RacerEntity, PhysicsEngine, CollisionEvent } from './game/physics';
-import { createBotRacers, updateBotAI, BotDriver } from './game/aiBots';
-import { GameCanvas } from './game/GameCanvas';
+import { createBotRacers, BotDriver } from './game/aiBots';
+import { GameCanvas, HudState } from './game/GameCanvas';
 import { GameHUD } from './components/GameHUD';
 import { GarageMenu } from './components/GarageMenu';
 import { TuningAdvisorModal } from './components/TuningAdvisorModal';
@@ -28,6 +28,18 @@ import { RaceFinishedModal } from './components/RaceFinishedModal';
 import { soundSynth } from './game/audio';
 
 type GameMode = 'garage' | 'racing' | 'finished';
+
+const DEFAULT_HUD_STATE: HudState = {
+  speedKmh: 0,
+  nitroPercent: 100,
+  playerRank: 1,
+  playerProgress: 0,
+  isAirborne: false,
+  onRamp: false,
+  slipstreamActive: false,
+  stunTimer: 0,
+  racersProgress: [],
+};
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -50,16 +62,27 @@ export default function App() {
   const botDriversRef = useRef<BotDriver[]>([]);
   const opponentRacersRef = useRef<Map<string, RacerEntity>>(new Map());
 
-  // Input states
-  const targetLaneRef = useRef<number>(1);
-  const wantsNitroRef = useRef<boolean>(false);
+  // Input states (Stable Ref read inside GameCanvas 60 FPS loop)
+  const inputRef = useRef<{
+    throttle: number; // 1: gas, -1: brake, 0: coast
+    targetLane: number; // 0..3
+    wantsNitro: boolean;
+  }>({
+    throttle: 1, // Default forward drive
+    targetLane: 1,
+    wantsNitro: false,
+  });
+
+  // UI state for button highlights
+  const [currentThrottle, setCurrentThrottle] = useState<number>(1);
+  const [wantsNitroState, setWantsNitroState] = useState<boolean>(false);
+
+  // Decoupled HUD state received from canvas loop at ~16Hz
+  const [hudState, setHudState] = useState<HudState>(DEFAULT_HUD_STATE);
   const [activeNotification, setActiveNotification] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [totalBumpsDelivered, setTotalBumpsDelivered] = useState<number>(0);
   const [isAudioMuted, setIsAudioMuted] = useState<boolean>(soundSynth.getMuted());
-
-  // Force re-render tick for HUD
-  const [, setTick] = useState<number>(0);
 
   // 1. Initialize Firebase Connection & Auth
   useEffect(() => {
@@ -152,84 +175,93 @@ export default function App() {
   };
 
   // Start Race Setup
-  const initializeRace = useCallback((length: number, theme: TrackThemeId, roomId: string | null = null) => {
-    const track = generateTrackData(length, theme);
-    setTrackData(track);
-    physicsEngineRef.current = new PhysicsEngine(track);
+  const initializeRace = useCallback(
+    (length: number, theme: TrackThemeId, roomId: string | null = null) => {
+      const track = generateTrackData(length, theme);
+      setTrackData(track);
+      physicsEngineRef.current = new PhysicsEngine(track);
 
-    const carId = garageData.activeCarId || 'red_storm';
-    const carDef = VEHICLES[carId] || VEHICLES.red_storm;
-    const upgrades = garageData.upgrades[carId] || {};
-    const physicsStats = computePhysicsStats(carId, upgrades);
+      const carId = garageData.activeCarId || 'red_storm';
+      const carDef = VEHICLES[carId] || VEHICLES.red_storm;
+      const upgrades = garageData.upgrades[carId] || {};
+      const physicsStats = computePhysicsStats(carId, upgrades);
 
-    // Initial player entity
-    const player: RacerEntity = {
-      id: currentUser ? currentUser.uid : 'player_local',
-      isPlayer: true,
-      name: currentUser?.displayName || 'Apex Driver',
-      carId,
-      color: carDef.primaryColor,
-      lane: 1,
-      currentX: LANE_X_COORDS[1],
-      currentZ: 0,
-      currentY: 0,
-      speed: 0,
-      verticalVelocity: 0,
-      rollAngle: 0,
-      pitchAngle: 0,
-      yawAngle: 0,
-      isAirborne: false,
-      nitroActive: false,
-      nitroFuel: 1.0,
-      slipstreamActive: false,
-      boostPadTimer: 0,
-      stunTimer: 0,
-      finished: false,
-      finishTime: 0,
-      rank: 1,
-      stats: physicsStats,
-    };
+      const player: RacerEntity = {
+        id: currentUser ? currentUser.uid : 'player_local',
+        isPlayer: true,
+        name: currentUser?.displayName || 'Apex Driver',
+        carId,
+        color: carDef.primaryColor,
+        lane: 1,
+        currentX: LANE_X_COORDS[1],
+        currentZ: 0,
+        currentY: 0,
+        speed: 0,
+        verticalVelocity: 0,
+        rollAngle: 0,
+        pitchAngle: 0,
+        yawAngle: 0,
+        isAirborne: false,
+        onRamp: false,
+        nitroActive: false,
+        nitroFuel: 1.0,
+        slipstreamActive: false,
+        boostPadTimer: 0,
+        stunTimer: 0,
+        isBraking: false,
+        finished: false,
+        finishTime: 0,
+        rank: 1,
+        stats: physicsStats,
+      };
 
-    playerEntityRef.current = player;
-    targetLaneRef.current = 1;
-    wantsNitroRef.current = false;
-    setTotalBumpsDelivered(0);
-    setMultiplayerRoomId(roomId);
-    setShowMultiplayerLobby(false);
+      playerEntityRef.current = player;
+      inputRef.current = {
+        throttle: 1, // Start accelerating on green
+        targetLane: 1,
+        wantsNitro: false,
+      };
+      setCurrentThrottle(1);
+      setWantsNitroState(false);
+      setTotalBumpsDelivered(0);
+      setMultiplayerRoomId(roomId);
+      setShowMultiplayerLobby(false);
 
-    // Generate Fallback AI Bots
-    const bots = createBotRacers(track);
-    botDriversRef.current = bots;
-    opponentRacersRef.current.clear();
+      // Generate Fallback AI Bots
+      const bots = createBotRacers(track);
+      botDriversRef.current = bots;
+      opponentRacersRef.current.clear();
 
-    setGameMode('racing');
+      setGameMode('racing');
 
-    // Countdown sequence (3, 2, 1, GO!)
-    setCountdown(3);
-    soundSynth.playCountdownBeep(false);
-
-    const t1 = setTimeout(() => {
-      setCountdown(2);
+      // Countdown sequence (3, 2, 1, GO!)
+      setCountdown(3);
       soundSynth.playCountdownBeep(false);
-    }, 1000);
 
-    const t2 = setTimeout(() => {
-      setCountdown(1);
-      soundSynth.playCountdownBeep(false);
-    }, 2000);
+      const t1 = setTimeout(() => {
+        setCountdown(2);
+        soundSynth.playCountdownBeep(false);
+      }, 1000);
 
-    const t3 = setTimeout(() => {
-      setCountdown(0); // GO!
-      soundSynth.playCountdownBeep(true);
-      setTimeout(() => setCountdown(null), 1000);
-    }, 3000);
+      const t2 = setTimeout(() => {
+        setCountdown(1);
+        soundSynth.playCountdownBeep(false);
+      }, 2000);
 
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-    };
-  }, [currentUser, garageData]);
+      const t3 = setTimeout(() => {
+        setCountdown(0);
+        soundSynth.playCountdownBeep(true);
+        setTimeout(() => setCountdown(null), 1000);
+      }, 3000);
+
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    },
+    [currentUser, garageData]
+  );
 
   const handleStartSoloRace = (length: number, theme: TrackThemeId) => {
     setActiveTrackLength(length);
@@ -243,26 +275,53 @@ export default function App() {
     initializeRace(length, theme, roomId);
   };
 
-  // Keyboard controls listener
+  // Keyboard Controls Listener (WASD & Arrow Keys & Space)
   useEffect(() => {
     if (gameMode !== 'racing') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Steer Left
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
-        targetLaneRef.current = Math.max(0, targetLaneRef.current - 1);
-      } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
-        targetLaneRef.current = Math.min(3, targetLaneRef.current + 1);
-      } else if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        if (!wantsNitroRef.current) {
-          wantsNitroRef.current = true;
+        inputRef.current.targetLane = Math.max(0, inputRef.current.targetLane - 1);
+      }
+      // Steer Right
+      else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        inputRef.current.targetLane = Math.min(3, inputRef.current.targetLane + 1);
+      }
+      // Accelerate (Gas)
+      else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        inputRef.current.throttle = 1;
+        setCurrentThrottle(1);
+      }
+      // Brake
+      else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        inputRef.current.throttle = -1;
+        setCurrentThrottle(-1);
+      }
+      // Nitro Boost
+      else if (e.key === ' ' || e.key === 'Shift') {
+        if (!inputRef.current.wantsNitro) {
+          inputRef.current.wantsNitro = true;
+          setWantsNitroState(true);
           soundSynth.playNitroBoost();
         }
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        wantsNitroRef.current = false;
+      if (
+        e.key === 'ArrowUp' ||
+        e.key === 'w' ||
+        e.key === 'W' ||
+        e.key === 'ArrowDown' ||
+        e.key === 's' ||
+        e.key === 'S'
+      ) {
+        inputRef.current.throttle = 1; // Default to cruise/drive
+        setCurrentThrottle(1);
+      } else if (e.key === ' ' || e.key === 'Shift') {
+        inputRef.current.wantsNitro = false;
+        setWantsNitroState(false);
       }
     };
 
@@ -275,89 +334,30 @@ export default function App() {
     };
   }, [gameMode]);
 
-  // Real-time Physics Simulation Loop (60 FPS) & Throttled 20Hz Network Tick
+  // Network sync to Firebase in Multiplayer mode (20Hz)
   useEffect(() => {
-    if (gameMode !== 'racing' || !physicsEngineRef.current || !playerEntityRef.current) return;
+    if (!multiplayerRoomId || !currentUser || gameMode !== 'racing') return;
 
-    let animId: number;
-    let lastTime = performance.now();
-    let networkTickTimer = 0;
-    const startTime = performance.now();
-
-    const loop = (currentTime: number) => {
-      animId = requestAnimationFrame(loop);
-
-      const delta = Math.min((currentTime - lastTime) / 1000, 0.05);
-      lastTime = currentTime;
-
-      const physics = physicsEngineRef.current;
+    const interval = setInterval(() => {
       const player = playerEntityRef.current;
-      if (!physics || !player) return;
-
-      const canAccelerate = countdown === null;
-
-      // 1. Update Player Physics
-      physics.updateRacer(
-        player,
-        targetLaneRef.current,
-        canAccelerate && wantsNitroRef.current,
-        canAccelerate ? delta : 0
-      );
-
-      // Record finish time if newly crossed
-      if (player.finished && player.finishTime === 0) {
-        player.finishTime = (performance.now() - startTime) / 1000;
+      if (player) {
+        updatePlayerRaceTick(multiplayerRoomId, currentUser.uid, {
+          x: player.currentX,
+          z: player.currentZ,
+          lane: player.lane,
+          speed: player.speed,
+          nitroActive: player.nitroActive,
+          finished: player.finished,
+          finishTime: player.finishTime,
+          rank: player.rank,
+        });
       }
+    }, 50);
 
-      // 2. Update AI Bots
-      const allRacers: RacerEntity[] = [
-        player,
-        ...botDriversRef.current.map((b) => b.entity),
-        ...Array.from(opponentRacersRef.current.values()),
-      ];
+    return () => clearInterval(interval);
+  }, [multiplayerRoomId, currentUser, gameMode]);
 
-      botDriversRef.current.forEach((bot) => {
-        if (canAccelerate) {
-          const { targetLane, wantsNitro } = updateBotAI(bot, physics.track, allRacers, delta);
-          physics.updateRacer(bot.entity, targetLane, wantsNitro, delta);
-
-          if (bot.entity.finished && bot.entity.finishTime === 0) {
-            bot.entity.finishTime = (performance.now() - startTime) / 1000;
-          }
-        }
-      });
-
-      // 3. Resolve Vehicle Interactions (Bumping, Slipstream)
-      physics.resolveVehicleInteractions(allRacers);
-
-      // 4. Throttled 20Hz Network Update to Firebase (every 50ms)
-      if (multiplayerRoomId && currentUser) {
-        networkTickTimer += delta;
-        if (networkTickTimer >= 0.05) {
-          networkTickTimer = 0;
-          updatePlayerRaceTick(multiplayerRoomId, currentUser.uid, {
-            x: player.currentX,
-            z: player.currentZ,
-            lane: player.lane,
-            speed: player.speed,
-            nitroActive: player.nitroActive,
-            finished: player.finished,
-            finishTime: player.finishTime,
-            rank: player.rank,
-          });
-        }
-      }
-
-      // Request HUD re-render
-      setTick((prev) => (prev + 1) % 1000);
-    };
-
-    animId = requestAnimationFrame(loop);
-
-    return () => cancelAnimationFrame(animId);
-  }, [gameMode, countdown, multiplayerRoomId, currentUser]);
-
-  // Subscribe to Multiplayer Room Opponents
+  // Subscribe to Opponents in Multiplayer Room
   useEffect(() => {
     if (!multiplayerRoomId || gameMode !== 'racing') return;
 
@@ -384,11 +384,13 @@ export default function App() {
               pitchAngle: 0,
               yawAngle: 0,
               isAirborne: false,
+              onRamp: false,
               nitroActive: data.nitroActive || false,
               nitroFuel: 1.0,
               slipstreamActive: false,
               boostPadTimer: 0,
               stunTimer: 0,
+              isBraking: false,
               finished: data.finished || false,
               finishTime: data.finishTime || 0,
               rank: data.rank || 2,
@@ -396,7 +398,6 @@ export default function App() {
             };
             opponentRacersRef.current.set(data.playerId, opp);
           } else {
-            // Smooth LERP updates for 20Hz network ticks
             opp.currentX += (data.x - opp.currentX) * 0.25;
             opp.currentZ += (data.z - opp.currentZ) * 0.25;
             opp.speed = data.speed;
@@ -411,7 +412,7 @@ export default function App() {
     return () => unsub();
   }, [multiplayerRoomId, gameMode, currentUser]);
 
-  const handleCollisionEvent = (event: CollisionEvent) => {
+  const handleCollisionEvent = useCallback((event: CollisionEvent) => {
     if (!playerEntityRef.current) return;
     const isPlayerInvolved =
       event.victimId === playerEntityRef.current.id ||
@@ -426,12 +427,12 @@ export default function App() {
       } else if (event.type === 'boost_pad') {
         triggerHUDAlert('SPEED PAD BOOST! +35%');
       } else if (event.type === 'ramp') {
-        triggerHUDAlert('AIRBORNE RAMP JUMP!');
+        triggerHUDAlert('AIRBORNE STUNT JUMP!');
       } else if (event.type === 'obstacle') {
         triggerHUDAlert('ROAD HAZARD! SPEED LOSS');
       }
     }
-  };
+  }, []);
 
   const triggerHUDAlert = (msg: string) => {
     setActiveNotification(msg);
@@ -440,12 +441,19 @@ export default function App() {
     }, 1800);
   };
 
+  // On-Screen Touch / Button Handlers
   const handleLaneShift = (direction: -1 | 1) => {
-    targetLaneRef.current = Math.max(0, Math.min(3, targetLaneRef.current + direction));
+    inputRef.current.targetLane = Math.max(0, Math.min(3, inputRef.current.targetLane + direction));
+  };
+
+  const handleThrottleChange = (throttle: number) => {
+    inputRef.current.throttle = throttle;
+    setCurrentThrottle(throttle);
   };
 
   const handleNitroToggle = (active: boolean) => {
-    wantsNitroRef.current = active;
+    inputRef.current.wantsNitro = active;
+    setWantsNitroState(active);
   };
 
   const handleToggleMute = () => {
@@ -453,18 +461,9 @@ export default function App() {
     setIsAudioMuted(muted);
   };
 
-  // Build combined racers array for 3D canvas and HUD
-  const allRacersList = playerEntityRef.current
-    ? [
-        playerEntityRef.current,
-        ...botDriversRef.current.map((b) => b.entity),
-        ...Array.from(opponentRacersRef.current.values()),
-      ]
-    : [];
-
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
-      {/* 1. Main Garage Mode */}
+    <div className="relative w-screen h-screen max-h-screen overflow-hidden bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* 1. Main Garage View */}
       {gameMode === 'garage' && (
         <GarageMenu
           user={currentUser}
@@ -482,28 +481,33 @@ export default function App() {
         />
       )}
 
-      {/* 2. Active 3D Race Mode */}
+      {/* 2. Active 3D Race View */}
       {gameMode === 'racing' && trackData && playerEntityRef.current && physicsEngineRef.current && (
         <div className="relative w-full h-full">
           <GameCanvas
             track={trackData}
-            racers={allRacersList}
             playerEntity={playerEntityRef.current}
+            botDrivers={botDriversRef.current}
+            opponentRacersMap={opponentRacersRef.current}
             physics={physicsEngineRef.current}
+            inputRef={inputRef}
+            onHudUpdate={setHudState}
             onCollisionEvent={handleCollisionEvent}
             onRaceFinished={() => setGameMode('finished')}
+            countdown={countdown}
           />
 
           <GameHUD
-            player={playerEntityRef.current}
-            racers={allRacersList}
-            track={trackData}
+            hudState={hudState}
             activeNotification={activeNotification}
             onLaneShift={handleLaneShift}
+            onThrottleChange={handleThrottleChange}
             onNitroToggle={handleNitroToggle}
             isMuted={isAudioMuted}
             onToggleMute={handleToggleMute}
             countdown={countdown}
+            currentThrottle={currentThrottle}
+            wantsNitro={wantsNitroState}
           />
         </div>
       )}
@@ -512,7 +516,11 @@ export default function App() {
       {gameMode === 'finished' && playerEntityRef.current && (
         <RaceFinishedModal
           player={playerEntityRef.current}
-          racers={allRacersList}
+          racers={[
+            playerEntityRef.current,
+            ...botDriversRef.current.map((b) => b.entity),
+            ...Array.from(opponentRacersRef.current.values()),
+          ]}
           totalBumps={totalBumpsDelivered}
           onReplay={() => initializeRace(activeTrackLength, activeTrackTheme, multiplayerRoomId)}
           onReturnToGarage={() => setGameMode('garage')}

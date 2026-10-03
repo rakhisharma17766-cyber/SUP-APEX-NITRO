@@ -81,7 +81,6 @@ export interface TrackData {
   roadWidth: number;
   theme: TrackThemeConfig;
   features: TrackFeature[];
-  // Spline function for lateral curve / elevation at any Z
   getTrackCenter: (z: number) => { x: number; y: number; pitch: number; yaw: number };
 }
 
@@ -94,14 +93,12 @@ export function generateTrackData(
   const theme = TRACK_THEMES[themeId] || TRACK_THEMES.cyber;
   const features: TrackFeature[] = [];
 
-  // Generate ramps, boost pads, and obstacles along the track
-  // Avoid placing items right at start (first 100m) or at finish (last 80m)
-  const usableStart = 120;
-  const usableEnd = totalLengthMeters - 100;
+  const usableStart = 100;
+  const usableEnd = totalLengthMeters - 80;
   let currentZ = usableStart;
 
   while (currentZ < usableEnd) {
-    const spacing = 70 + Math.random() * 90; // distance to next feature cluster
+    const spacing = 65 + Math.random() * 75;
     currentZ += spacing;
     if (currentZ >= usableEnd) break;
 
@@ -114,59 +111,54 @@ export function generateTrackData(
         type: 'boost_pad',
         z: currentZ,
         lane,
-        width: 2.4,
-        length: 8.0,
+        width: 2.8,
+        length: 7.0,
         height: 0.1,
       });
-      // Optionally place a second boost pad in an adjacent lane
-      if (Math.random() < 0.3) {
+      if (Math.random() < 0.35) {
         const otherLane = (lane + 2) % 4;
         features.push({
           type: 'boost_pad',
-          z: currentZ + 12,
+          z: currentZ + 10,
           lane: otherLane,
-          width: 2.4,
-          length: 8.0,
+          width: 2.8,
+          length: 7.0,
           height: 0.1,
         });
       }
-    } else if (roll < 0.75) {
-      // Airborne Jump Ramp across 1 or 2 lanes
+    } else if (roll < 0.78) {
+      // Airborne Jump Ramp
       features.push({
         type: 'ramp',
         z: currentZ,
         lane,
-        width: 2.6,
-        length: 12.0,
-        height: 1.8,
+        width: 3.0,
+        length: 14.0,
+        height: 2.2,
       });
     } else {
-      // Road Obstacle (Slow bump / hazard barrier)
+      // Road Obstacle
       features.push({
         type: 'obstacle',
         z: currentZ,
         lane,
-        width: 2.4,
-        length: 3.5,
-        height: 0.6,
+        width: 2.8,
+        length: 3.0,
+        height: 0.9,
       });
     }
   }
 
-  // Track Curvature and Elevation math
   const getTrackCenter = (z: number) => {
-    // Gentle S-curves every 400m
-    const wave1 = Math.sin(z * 0.004) * 8;
-    const wave2 = Math.cos(z * 0.009) * 3;
+    const wave1 = Math.sin(z * 0.0035) * 8.5;
+    const wave2 = Math.cos(z * 0.008) * 3.2;
     const x = wave1 + wave2;
 
-    // Gentle elevation swells
-    const hillWave = Math.sin(z * 0.005) * 1.5;
+    const hillWave = Math.sin(z * 0.0045) * 1.8;
     const y = Math.max(0, hillWave);
 
-    // Approximate derivatives for rotation
-    const dx = Math.cos(z * 0.004) * 8 * 0.004 - Math.sin(z * 0.009) * 3 * 0.009;
-    const dy = Math.cos(z * 0.005) * 1.5 * 0.005;
+    const dx = Math.cos(z * 0.0035) * 8.5 * 0.0035 - Math.sin(z * 0.008) * 3.2 * 0.008;
+    const dy = Math.cos(z * 0.0045) * 1.8 * 0.0045;
 
     const yaw = -Math.atan2(dx, 1);
     const pitch = Math.atan2(dy, 1);
@@ -184,10 +176,7 @@ export function generateTrackData(
   };
 }
 
-// Build Three.js 3D Road Meshes, Curbs, Ramps, Boost Pads, and Scenery
-export function buildTrackScene(
-  track: TrackData
-): {
+export function buildTrackScene(track: TrackData): {
   group: THREE.Group;
   disposables: { geometry?: THREE.BufferGeometry; material?: THREE.Material }[];
 } {
@@ -197,13 +186,11 @@ export function buildTrackScene(
   const segmentLength = 20;
   const numSegments = Math.ceil(track.length / segmentLength);
 
-  // Road Surface Geometry
+  // Road Surface Materials
   const roadMat = new THREE.MeshLambertMaterial({
     color: new THREE.Color(track.theme.roadColor),
     flatShading: true,
   });
-  disposables.push({ material: roadMat });
-
   const curbMat1 = new THREE.MeshLambertMaterial({
     color: new THREE.Color(track.theme.curbColor1),
     flatShading: true,
@@ -212,22 +199,25 @@ export function buildTrackScene(
     color: new THREE.Color(track.theme.curbColor2),
     flatShading: true,
   });
-  disposables.push({ material: curbMat1 }, { material: curbMat2 });
-
   const lineMat = new THREE.MeshBasicMaterial({
     color: new THREE.Color(track.theme.roadLinesColor),
   });
-  disposables.push({ material: lineMat });
 
-  // Instanced or grouped road plates
+  disposables.push(
+    { material: roadMat },
+    { material: curbMat1 },
+    { material: curbMat2 },
+    { material: lineMat }
+  );
+
   const halfWidth = track.roadWidth / 2;
 
+  // Road segments
   for (let i = 0; i < numSegments; i++) {
     const z1 = i * segmentLength;
     const z2 = Math.min((i + 1) * segmentLength, track.length);
     const zMid = (z1 + z2) / 2;
     const len = z2 - z1;
-
     const center = track.getTrackCenter(zMid);
 
     // Road Slab
@@ -240,7 +230,7 @@ export function buildTrackScene(
     group.add(roadMesh);
     disposables.push({ geometry: roadGeo });
 
-    // Left & Right Curbs
+    // Curbs
     const curbGeo = new THREE.BoxGeometry(0.8, 0.5, len);
     const leftCurb = new THREE.Mesh(curbGeo, i % 2 === 0 ? curbMat1 : curbMat2);
     leftCurb.position.set(center.x - halfWidth - 0.4, center.y - 0.15, zMid);
@@ -268,90 +258,195 @@ export function buildTrackScene(
     }
   }
 
-  // Boost Pads & Ramps & Obstacles
-  const boostGeo = new THREE.BoxGeometry(2.4, 0.08, 6.0);
+  // Feature Materials
   const boostMat = new THREE.MeshBasicMaterial({
     color: new THREE.Color(track.theme.accentGlowColor),
   });
-  disposables.push({ geometry: boostGeo, material: boostMat });
+  const boostBorderMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  disposables.push({ material: boostMat }, { material: boostBorderMat });
 
   const rampMat = new THREE.MeshLambertMaterial({
-    color: new THREE.Color(track.theme.curbColor1),
+    color: new THREE.Color(0xf59e0b), // Vibrant Yellow/Orange Stunt Ramp
     flatShading: true,
   });
-  disposables.push({ material: rampMat });
-
-  const obstacleGeo = new THREE.BoxGeometry(2.4, 0.6, 2.0);
-  const obstacleMat = new THREE.MeshLambertMaterial({
-    color: new THREE.Color('#ef4444'),
+  const rampArrowMat = new THREE.MeshBasicMaterial({
+    color: 0x111827,
+  });
+  const rampSideMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(0xd97706),
     flatShading: true,
   });
-  disposables.push({ geometry: obstacleGeo, material: obstacleMat });
+  disposables.push({ material: rampMat }, { material: rampArrowMat }, { material: rampSideMat });
 
+  const barrierMat = new THREE.MeshLambertMaterial({
+    color: new THREE.Color(0xef4444),
+    flatShading: true,
+  });
+  const barrierStripeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const hazardLightMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+  disposables.push(
+    { material: barrierMat },
+    { material: barrierStripeMat },
+    { material: hazardLightMat }
+  );
+
+  // Generate 3D Meshes for Features
   track.features.forEach((feat) => {
     const center = track.getTrackCenter(feat.z);
     const laneX = track.lanes[feat.lane];
 
+    // ===================================
+    // 1. SPEED BOOST PAD
+    // ===================================
     if (feat.type === 'boost_pad') {
-      const boostMesh = new THREE.Mesh(boostGeo, boostMat);
-      boostMesh.position.set(center.x + laneX, center.y + 0.06, feat.z);
-      boostMesh.rotation.y = center.yaw;
-      boostMesh.rotation.x = center.pitch;
-      group.add(boostMesh);
-    } else if (feat.type === 'ramp') {
-      // Wedge Ramp Geometry
+      const padGroup = new THREE.Group();
+      padGroup.position.set(center.x + laneX, center.y + 0.06, feat.z);
+      padGroup.rotation.y = center.yaw;
+      padGroup.rotation.x = center.pitch;
+
+      const baseGeo = new THREE.BoxGeometry(feat.width, 0.05, feat.length);
+      const baseMesh = new THREE.Mesh(baseGeo, boostMat);
+      padGroup.add(baseMesh);
+      disposables.push({ geometry: baseGeo });
+
+      // Chevron arrows on pad pointing forward (+Z)
+      const arrowCount = 3;
+      const arrowGeo = new THREE.ConeGeometry(0.65, 1.2, 3);
+      arrowGeo.rotateX(Math.PI / 2); // Point flat along ground toward +Z
+      for (let a = 0; a < arrowCount; a++) {
+        const arrow = new THREE.Mesh(arrowGeo, boostBorderMat);
+        arrow.position.set(0, 0.06, (a - 1) * 2.0);
+        padGroup.add(arrow);
+      }
+      disposables.push({ geometry: arrowGeo });
+
+      group.add(padGroup);
+    }
+
+    // ===================================
+    // 2. REAL 3D AIRBORNE JUMP RAMP
+    // ===================================
+    else if (feat.type === 'ramp') {
+      const rampGroup = new THREE.Group();
+      rampGroup.position.set(center.x + laneX, center.y, feat.z);
+      rampGroup.rotation.y = center.yaw;
+      rampGroup.rotation.x = center.pitch;
+
+      // Construct authentic inclined wedge along Z:
+      // Starts at z = -feat.length / 2 with y = 0, rises to z = +feat.length / 2 with y = feat.height
       const rampShape = new THREE.Shape();
-      rampShape.moveTo(0, 0);
-      rampShape.lineTo(feat.length, feat.height);
-      rampShape.lineTo(feat.length, 0);
+      rampShape.moveTo(-feat.length / 2, 0);
+      rampShape.lineTo(feat.length / 2, feat.height);
+      rampShape.lineTo(feat.length / 2, 0);
       rampShape.closePath();
 
       const extrudeSettings = { depth: feat.width, bevelEnabled: false };
-      const rampGeometry = new THREE.ExtrudeGeometry(rampShape, extrudeSettings);
-      const rampMesh = new THREE.Mesh(rampGeometry, rampMat);
-      rampMesh.rotation.y = Math.PI / 2 + center.yaw;
-      rampMesh.position.set(center.x + laneX + feat.width / 2, center.y, feat.z - feat.length / 2);
-      group.add(rampMesh);
-      disposables.push({ geometry: rampGeometry });
-    } else if (feat.type === 'obstacle') {
-      const obsMesh = new THREE.Mesh(obstacleGeo, obstacleMat);
-      obsMesh.position.set(center.x + laneX, center.y + 0.3, feat.z);
-      obsMesh.rotation.y = center.yaw;
-      group.add(obsMesh);
+      const rampGeo = new THREE.ExtrudeGeometry(rampShape, extrudeSettings);
+      // Center width
+      rampGeo.translate(0, 0, -feat.width / 2);
+      // Rotate shape so length is along Z
+      rampGeo.rotateY(Math.PI / 2);
+
+      const rampMesh = new THREE.Mesh(rampGeo, rampMat);
+      rampGroup.add(rampMesh);
+      disposables.push({ geometry: rampGeo });
+
+      // Side guardrails on ramp
+      const railGeo = new THREE.BoxGeometry(0.15, feat.height * 0.4, feat.length);
+      const leftRail = new THREE.Mesh(railGeo, rampSideMat);
+      leftRail.position.set(-feat.width / 2 - 0.08, feat.height * 0.5, 0);
+      leftRail.rotation.x = -Math.atan2(feat.height, feat.length);
+      rampGroup.add(leftRail);
+
+      const rightRail = new THREE.Mesh(railGeo, rampSideMat);
+      rightRail.position.set(feat.width / 2 + 0.08, feat.height * 0.5, 0);
+      rightRail.rotation.x = -Math.atan2(feat.height, feat.length);
+      rampGroup.add(rightRail);
+      disposables.push({ geometry: railGeo });
+
+      // Warning chevron arrows on the inclined face
+      const arrowGeo = new THREE.ConeGeometry(0.7, 1.4, 3);
+      arrowGeo.rotateX(Math.PI / 2);
+      for (let k = 0; k < 3; k++) {
+        const arrow = new THREE.Mesh(arrowGeo, rampArrowMat);
+        const zProg = (k - 1) * 3.5;
+        const yProg = ((zProg + feat.length / 2) / feat.length) * feat.height + 0.05;
+        arrow.position.set(0, yProg, zProg);
+        arrow.rotation.x = -Math.atan2(feat.height, feat.length);
+        rampGroup.add(arrow);
+      }
+      disposables.push({ geometry: arrowGeo });
+
+      group.add(rampGroup);
+    }
+
+    // ===================================
+    // 3. ROAD OBSTACLE (HAZARD BARRIER)
+    // ===================================
+    else if (feat.type === 'obstacle') {
+      const obsGroup = new THREE.Group();
+      obsGroup.position.set(center.x + laneX, center.y, feat.z);
+      obsGroup.rotation.y = center.yaw;
+      obsGroup.rotation.x = center.pitch;
+
+      // Heavy barrier concrete base
+      const baseGeo = new THREE.BoxGeometry(feat.width, 0.7, 0.8);
+      const baseMesh = new THREE.Mesh(baseGeo, barrierMat);
+      baseMesh.position.y = 0.35;
+      obsGroup.add(baseMesh);
+      disposables.push({ geometry: baseGeo });
+
+      // Diagonal hazard warning stripes
+      const stripeGeo = new THREE.BoxGeometry(feat.width + 0.05, 0.25, 0.85);
+      const stripeMesh = new THREE.Mesh(stripeGeo, barrierStripeMat);
+      stripeMesh.position.y = 0.35;
+      obsGroup.add(stripeMesh);
+      disposables.push({ geometry: stripeGeo });
+
+      // Two blinking warning beacons on top
+      const beaconGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.3, 8);
+      const leftBeacon = new THREE.Mesh(beaconGeo, hazardLightMat);
+      leftBeacon.position.set(-feat.width / 2 + 0.4, 0.85, 0);
+      const rightBeacon = new THREE.Mesh(beaconGeo, hazardLightMat);
+      rightBeacon.position.set(feat.width / 2 - 0.4, 0.85, 0);
+      obsGroup.add(leftBeacon, rightBeacon);
+      disposables.push({ geometry: beaconGeo });
+
+      group.add(obsGroup);
     }
   });
 
   // Finish Line Archway
   const finishZ = track.length - 20;
   const finishCenter = track.getTrackCenter(finishZ);
-  const pillarGeo = new THREE.BoxGeometry(1.2, 7, 1.2);
+  const pillarGeo = new THREE.BoxGeometry(1.2, 7.5, 1.2);
   const pillarMat = new THREE.MeshLambertMaterial({ color: 0x3b82f6, flatShading: true });
   disposables.push({ geometry: pillarGeo, material: pillarMat });
 
   const leftPillar = new THREE.Mesh(pillarGeo, pillarMat);
-  leftPillar.position.set(finishCenter.x - halfWidth - 1.5, finishCenter.y + 3.5, finishZ);
+  leftPillar.position.set(finishCenter.x - halfWidth - 1.5, finishCenter.y + 3.75, finishZ);
   group.add(leftPillar);
 
   const rightPillar = new THREE.Mesh(pillarGeo, pillarMat);
-  rightPillar.position.set(finishCenter.x + halfWidth + 1.5, finishCenter.y + 3.5, finishZ);
+  rightPillar.position.set(finishCenter.x + halfWidth + 1.5, finishCenter.y + 3.75, finishZ);
   group.add(rightPillar);
 
-  const crossbarGeo = new THREE.BoxGeometry(track.roadWidth + 4, 1.5, 1.2);
+  const crossbarGeo = new THREE.BoxGeometry(track.roadWidth + 4, 1.6, 1.2);
   const crossbarMat = new THREE.MeshLambertMaterial({ color: 0xfacc15, flatShading: true });
   const crossbar = new THREE.Mesh(crossbarGeo, crossbarMat);
-  crossbar.position.set(finishCenter.x, finishCenter.y + 6.8, finishZ);
+  crossbar.position.set(finishCenter.x, finishCenter.y + 7.2, finishZ);
   group.add(crossbar);
   disposables.push({ geometry: crossbarGeo, material: crossbarMat });
 
-  // Neon FINISH text banner simulation
-  const bannerGeo = new THREE.BoxGeometry(track.roadWidth, 1.0, 0.2);
+  // Finish Line Checkered Banner
+  const bannerGeo = new THREE.BoxGeometry(track.roadWidth, 1.2, 0.2);
   const bannerMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const bannerMesh = new THREE.Mesh(bannerGeo, bannerMat);
-  bannerMesh.position.set(finishCenter.x, finishCenter.y + 5.5, finishZ);
+  bannerMesh.position.set(finishCenter.x, finishCenter.y + 5.8, finishZ);
   group.add(bannerMesh);
   disposables.push({ geometry: bannerGeo, material: bannerMat });
 
-  // Procedural Scenery along road sides
+  // Procedural Scenery
   buildScenery(track, group, disposables);
 
   return { group, disposables };
@@ -362,11 +457,10 @@ function buildScenery(
   group: THREE.Group,
   disposables: { geometry?: THREE.BufferGeometry; material?: THREE.Material }[]
 ) {
-  const sceneryInterval = 40;
+  const sceneryInterval = 35;
   const count = Math.floor(track.length / sceneryInterval);
 
   if (track.theme.id === 'cyber') {
-    // Cyberpunk skyscrapers & neon towers
     const bldgGeo = new THREE.BoxGeometry(14, 45, 14);
     const bldgMat = new THREE.MeshLambertMaterial({ color: 0x090e1a, flatShading: true });
     disposables.push({ geometry: bldgGeo, material: bldgMat });
@@ -375,18 +469,17 @@ function buildScenery(
     disposables.push({ material: neonWindowMat });
 
     for (let i = 0; i < count; i++) {
-      const z = i * sceneryInterval + 20;
+      const z = i * sceneryInterval + 15;
       const center = track.getTrackCenter(z);
       const side = i % 2 === 0 ? 1 : -1;
-      const x = center.x + side * (26 + Math.random() * 15);
-      const height = 30 + Math.random() * 40;
+      const x = center.x + side * (24 + Math.random() * 12);
+      const height = 28 + Math.random() * 38;
 
       const bldg = new THREE.Mesh(bldgGeo, bldgMat);
       bldg.scale.set(1, height / 45, 1);
       bldg.position.set(x, center.y + height / 2 - 5, z);
       group.add(bldg);
 
-      // Neon accent stripe
       const stripeGeo = new THREE.BoxGeometry(0.4, height * 0.7, 0.4);
       const stripeMesh = new THREE.Mesh(stripeGeo, neonWindowMat);
       stripeMesh.position.set(x - side * 7.1, center.y + height / 2, z);
@@ -394,26 +487,24 @@ function buildScenery(
       disposables.push({ geometry: stripeGeo });
     }
   } else if (track.theme.id === 'desert') {
-    // Canyon rock mesas & boulders
     const rockGeo = new THREE.DodecahedronGeometry(8, 0);
     const rockMat = new THREE.MeshLambertMaterial({ color: 0x9a3412, flatShading: true });
     disposables.push({ geometry: rockGeo, material: rockMat });
 
     for (let i = 0; i < count; i++) {
-      const z = i * sceneryInterval + 20;
+      const z = i * sceneryInterval + 15;
       const center = track.getTrackCenter(z);
       const side = i % 2 === 0 ? 1 : -1;
-      const x = center.x + side * (22 + Math.random() * 16);
-      const scale = 1.0 + Math.random() * 2.2;
+      const x = center.x + side * (22 + Math.random() * 14);
+      const scale = 1.0 + Math.random() * 2.0;
 
       const rock = new THREE.Mesh(rockGeo, rockMat);
-      rock.scale.set(scale, scale * 1.6, scale);
-      rock.position.set(x, center.y + scale * 4, z);
+      rock.scale.set(scale, scale * 1.5, scale);
+      rock.position.set(x, center.y + scale * 3.8, z);
       rock.rotation.set(Math.random(), Math.random(), Math.random());
       group.add(rock);
     }
   } else {
-    // Sunset Beach: Tropical palms and ocean plane
     const trunkGeo = new THREE.CylinderGeometry(0.4, 0.7, 10, 5);
     const trunkMat = new THREE.MeshLambertMaterial({ color: 0x78350f, flatShading: true });
     const foliageGeo = new THREE.ConeGeometry(4, 5, 5);
@@ -424,10 +515,10 @@ function buildScenery(
     );
 
     for (let i = 0; i < count; i++) {
-      const z = i * sceneryInterval + 20;
+      const z = i * sceneryInterval + 15;
       const center = track.getTrackCenter(z);
       const side = i % 2 === 0 ? 1 : -1;
-      const x = center.x + side * (18 + Math.random() * 12);
+      const x = center.x + side * (18 + Math.random() * 10);
 
       const tree = new THREE.Group();
       const trunk = new THREE.Mesh(trunkGeo, trunkMat);
@@ -443,7 +534,6 @@ function buildScenery(
       group.add(tree);
     }
 
-    // Ocean Water plane
     const waterGeo = new THREE.PlaneGeometry(600, track.length + 400);
     const waterMat = new THREE.MeshLambertMaterial({
       color: 0x0284c7,

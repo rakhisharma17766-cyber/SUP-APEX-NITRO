@@ -17,11 +17,13 @@ export interface RacerEntity {
   pitchAngle: number;
   yawAngle: number;
   isAirborne: boolean;
+  onRamp: boolean;
   nitroActive: boolean;
   nitroFuel: number; // 0.0 to 1.0
   slipstreamActive: boolean;
   boostPadTimer: number; // boost pad active countdown
-  stunTimer: number; // slow down timer from bump
+  stunTimer: number; // slow down timer from bump or hazard
+  isBraking: boolean;
   finished: boolean;
   finishTime: number;
   rank: number;
@@ -46,12 +48,13 @@ export class PhysicsEngine {
   public updateRacer(
     racer: RacerEntity,
     targetLaneInput: number, // 0..3
+    throttleInput: number, // 1: gas, -1: brake, 0: coast
     wantsNitro: boolean,
     delta: number
   ) {
     if (racer.finished) {
       // Coast down to gradual stop after finishing
-      racer.speed *= Math.pow(0.95, delta * 60);
+      racer.speed *= Math.pow(0.94, delta * 60);
       racer.currentZ += racer.speed * delta;
       return;
     }
@@ -91,10 +94,11 @@ export class PhysicsEngine {
       racer.nitroFuel = Math.min(1.0, racer.nitroFuel + stats.nitroRefillRate * delta);
     }
 
-    // 3. Speed & Acceleration Physics
+    // 3. Throttle, Brake & Speed Physics
     let targetSpeed = stats.maxSpeedUnitsPerSec;
+    racer.isBraking = throttleInput < 0;
 
-    // Speed modifiers
+    // Modifiers to maximum speed
     if (racer.nitroActive) {
       targetSpeed *= stats.nitroSpeedMultiplier;
     }
@@ -107,16 +111,29 @@ export class PhysicsEngine {
     }
     if (racer.stunTimer > 0) {
       racer.stunTimer -= delta;
-      targetSpeed *= 0.65; // temporary stagger
+      targetSpeed *= 0.65; // temporary hazard stagger
     }
 
-    // Accelerate toward target speed
-    if (racer.speed < targetSpeed) {
+    // Process acceleration vs braking vs coasting
+    if (throttleInput < 0) {
+      // Heavy active braking
+      const brakeForce = 75.0; // units/sec^2
+      racer.speed = Math.max(0, racer.speed - brakeForce * delta);
+    } else if (throttleInput > 0 || racer.nitroActive) {
+      // Active gas acceleration
       const accel = racer.nitroActive ? stats.accelerationRate * 1.6 : stats.accelerationRate;
-      racer.speed = Math.min(targetSpeed, racer.speed + accel * delta);
+      if (racer.speed < targetSpeed) {
+        racer.speed = Math.min(targetSpeed, racer.speed + accel * delta);
+      } else {
+        // Natural air resistance drag
+        racer.speed = Math.max(targetSpeed, racer.speed - 30 * delta);
+      }
     } else {
-      // Natural drag deceleration
-      racer.speed = Math.max(targetSpeed, racer.speed - 30 * delta);
+      // Coasting with natural drag down to idle roll
+      const coastTarget = 15.0;
+      if (racer.speed > coastTarget) {
+        racer.speed = Math.max(coastTarget, racer.speed - 25 * delta);
+      }
     }
 
     // 4. Longitudinal Progression
@@ -127,56 +144,35 @@ export class PhysicsEngine {
       racer.finished = true;
     }
 
-    // 6. Track Features (Ramps, Boost Pads, Obstacles)
-    this.checkTrackFeatures(racer);
-
-    // 7. Vertical Airborne Dynamics & Gravity
+    // 6. Track Features & Airborne Ramp Physics
     const center = this.track.getTrackCenter(racer.currentZ);
     const groundY = center.y;
+    racer.onRamp = false;
 
-    if (racer.isAirborne) {
-      racer.verticalVelocity -= 32 * delta; // Gravity
-      racer.currentY += racer.verticalVelocity * delta;
-
-      // Slight airborne pitch tilt
-      racer.pitchAngle = Math.min(0.3, racer.pitchAngle - 0.5 * delta);
-
-      // Landing check
-      if (racer.currentY <= groundY) {
-        racer.currentY = groundY;
-        racer.verticalVelocity = 0;
-        racer.isAirborne = false;
-        racer.pitchAngle = center.pitch;
-      }
-    } else {
-      racer.currentY = groundY;
-      racer.pitchAngle = center.pitch;
-    }
-
-    racer.yawAngle = center.yaw;
-  }
-
-  private checkTrackFeatures(racer: RacerEntity) {
-    const marginZ = 2.5;
-
+    // Check ramp interactions
     for (const feat of this.track.features) {
-      // Check if feature is at same lane and within Z window
-      if (Math.abs(feat.z - racer.currentZ) < marginZ && feat.lane === racer.lane) {
-        if (feat.type === 'boost_pad') {
-          if (racer.boostPadTimer <= 0) {
-            racer.boostPadTimer = 1.8;
-            this.collisionEvents.push({
-              type: 'boost_pad',
-              victimId: racer.id,
-              instigatorId: racer.id,
-              intensity: 1.0,
-            });
+      if (feat.lane === racer.lane) {
+        const rampStart = feat.z - feat.length / 2;
+        const rampEnd = feat.z + feat.length / 2;
+
+        if (feat.type === 'ramp') {
+          // Riding on the ramp surface
+          if (racer.currentZ >= rampStart && racer.currentZ <= rampEnd && !racer.isAirborne) {
+            racer.onRamp = true;
+            const progress = (racer.currentZ - rampStart) / feat.length;
+            racer.currentY = groundY + progress * feat.height;
+            racer.pitchAngle = center.pitch + 0.25;
           }
-        } else if (feat.type === 'ramp') {
-          if (!racer.isAirborne && racer.speed > 25) {
+          // Launch off the lip!
+          else if (
+            racer.currentZ > rampEnd &&
+            racer.currentZ - rampEnd < 4.0 &&
+            !racer.isAirborne &&
+            racer.speed > 20
+          ) {
             racer.isAirborne = true;
-            racer.verticalVelocity = 12 + (racer.speed / 50) * 4;
-            racer.pitchAngle = 0.25;
+            racer.verticalVelocity = 15 + (racer.speed / 45) * 8;
+            racer.pitchAngle = 0.32;
             this.collisionEvents.push({
               type: 'ramp',
               victimId: racer.id,
@@ -184,10 +180,21 @@ export class PhysicsEngine {
               intensity: 1.0,
             });
           }
+        } else if (feat.type === 'boost_pad') {
+          if (Math.abs(feat.z - racer.currentZ) < 3.0 && racer.boostPadTimer <= 0) {
+            racer.boostPadTimer = 2.2;
+            racer.speed = Math.max(racer.speed, stats.maxSpeedUnitsPerSec * 1.25);
+            this.collisionEvents.push({
+              type: 'boost_pad',
+              victimId: racer.id,
+              instigatorId: racer.id,
+              intensity: 1.0,
+            });
+          }
         } else if (feat.type === 'obstacle') {
-          if (racer.stunTimer <= 0 && !racer.isAirborne) {
-            racer.speed *= 0.6;
-            racer.stunTimer = 1.2;
+          if (Math.abs(feat.z - racer.currentZ) < 2.5 && racer.stunTimer <= 0 && !racer.isAirborne) {
+            racer.speed *= 0.55;
+            racer.stunTimer = 1.3;
             this.collisionEvents.push({
               type: 'obstacle',
               victimId: racer.id,
@@ -198,6 +205,28 @@ export class PhysicsEngine {
         }
       }
     }
+
+    // 7. Gravity & Airborne Dynamics
+    if (racer.isAirborne) {
+      racer.verticalVelocity -= 38 * delta; // Gravity
+      racer.currentY += racer.verticalVelocity * delta;
+
+      // Aerial pitch physics
+      racer.pitchAngle -= 0.5 * delta;
+
+      // Landing check
+      if (racer.currentY <= groundY) {
+        racer.currentY = groundY;
+        racer.verticalVelocity = 0;
+        racer.isAirborne = false;
+        racer.pitchAngle = center.pitch;
+      }
+    } else if (!racer.onRamp) {
+      racer.currentY = groundY;
+      racer.pitchAngle = center.pitch;
+    }
+
+    racer.yawAngle = center.yaw;
   }
 
   // Inter-Vehicle Collisions (Bumping) and Slipstreaming
@@ -240,7 +269,7 @@ export class PhysicsEngine {
 
           if (armorA >= armorB) {
             // Car A shoves Car B
-            rB.currentX -= pushDirection * (1.2 + bumpPowerA * 0.08);
+            rB.currentX -= pushDirection * (1.4 + bumpPowerA * 0.08);
             rB.stunTimer = 0.8;
             rB.speed *= 0.85;
             this.collisionEvents.push({
@@ -251,7 +280,7 @@ export class PhysicsEngine {
             });
           } else {
             // Car B shoves Car A
-            rA.currentX += pushDirection * (1.2 + bumpPowerB * 0.08);
+            rA.currentX += pushDirection * (1.4 + bumpPowerB * 0.08);
             rA.stunTimer = 0.8;
             rA.speed *= 0.85;
             this.collisionEvents.push({

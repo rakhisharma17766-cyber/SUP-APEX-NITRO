@@ -57,6 +57,8 @@ export function createBotRacers(track: TrackData): BotDriver[] {
       pitchAngle: 0,
       yawAngle: 0,
       isAirborne: false,
+      onRamp: false,
+      isBraking: false,
       nitroActive: false,
       nitroFuel: 1.0,
       slipstreamActive: false,

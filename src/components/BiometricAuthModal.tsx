@@ -20,7 +20,7 @@ import { soundSynth } from '../game/audio';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface BiometricAuthModalProps {
-  onSuccess: (user: FirebaseUser, garage: UserGarageData) => void;
+  onSuccess: (user: FirebaseUser, garage: UserGarageData, notice?: string) => void;
   onClose: () => void;
 }
 
@@ -33,6 +33,7 @@ export const BiometricAuthModal: React.FC<BiometricAuthModalProps> = ({
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanProgress, setScanProgress] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoNotice, setInfoNotice] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export const BiometricAuthModal: React.FC<BiometricAuthModalProps> = ({
     }
 
     setErrorMsg(null);
+    setInfoNotice(null);
     setIsScanning(true);
     setScanProgress(0);
     soundSynth.playBoostPad();
@@ -131,15 +133,18 @@ export const BiometricAuthModal: React.FC<BiometricAuthModalProps> = ({
 
         if (res.success && res.user) {
           setIsSuccess(true);
+          if (res.notice) {
+            setInfoNotice(res.notice);
+          }
           soundSynth.playVictoryFanfare();
           try {
             if ('vibrate' in navigator) navigator.vibrate([60, 80, 100]);
           } catch {}
 
           setTimeout(() => {
-            onSuccess(res.user!, res.garage);
+            onSuccess(res.user!, res.garage, res.notice);
             onClose();
-          }, 1200);
+          }, 1400);
         } else {
           setErrorMsg(res.error || 'Authentication error.');
           soundSynth.playBump(0.6);
@@ -149,10 +154,10 @@ export const BiometricAuthModal: React.FC<BiometricAuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-3xl p-6 shadow-2xl flex flex-col gap-6 text-slate-100">
+    <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto bg-slate-900 border border-slate-700/80 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col gap-5 text-slate-100 my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
               <Fingerprint className="w-6 h-6 animate-pulse" />
@@ -284,6 +289,14 @@ export const BiometricAuthModal: React.FC<BiometricAuthModalProps> = ({
             )}
           </span>
         </div>
+
+        {/* Information Notice */}
+        {infoNotice && (
+          <div className="bg-amber-950/80 border border-amber-500/70 p-3 rounded-2xl flex items-center gap-2.5 text-xs text-amber-300">
+            <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>{infoNotice}</span>
+          </div>
+        )}
 
         {/* Error Notification */}
         {errorMsg && (

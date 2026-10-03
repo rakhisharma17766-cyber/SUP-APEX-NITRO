@@ -16,19 +16,55 @@
   .text-glow {
     text-shadow: 0 0 12px currentColor;
   }
+  .safe-pb {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .safe-pt {
+    padding-top: max(0.5rem, env(safe-area-inset-top));
+  }
+  .safe-pl {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+  }
+  .safe-pr {
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
 }
 
-@keyframes pulse-fast {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.05); }
+/* Custom sleek scrollbars for modals */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.7);
 }
 
-@keyframes speed-streak {
-  0% { transform: translateY(-100%); opacity: 0; }
-  50% { opacity: 0.8; }
-  100% { transform: translateY(100%); opacity: 0; }
+/* Orientation specific layout helpers */
+@media (orientation: landscape) and (max-height: 520px) {
+  .landscape-compact-nav {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+  .landscape-compact-pedals {
+    transform: scale(0.85);
+    transform-origin: bottom right;
+  }
+  .landscape-compact-steer {
+    transform: scale(0.85);
+    transform-origin: bottom left;
+  }
 }
 
-.animate-speed-streak {
-  animation: speed-streak 0.6s linear infinite;
+@media (orientation: portrait) {
+  .portrait-full-stage {
+    min-height: 220px;
+  }
 }

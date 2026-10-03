@@ -138,7 +138,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
   const hasBiometric = !!(user && garageData.fingerprintAuth);
 
   return (
-    <div className="w-full min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col justify-between gap-8">
+    <div className="w-full min-h-[100dvh] bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-8 flex flex-col justify-between gap-6 md:gap-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
       {/* 1. TOP NAVIGATION HEADER */}
       <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">

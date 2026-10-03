@@ -208,10 +208,58 @@ export interface BiometricAuthResult {
   user: FirebaseUser | null;
   garage: UserGarageData;
   error?: string;
+  notice?: string;
 }
 
 function normalizeHandle(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+
+/**
+ * Safely acquire auth context with graceful fallback if Identity Toolkit is not enabled
+ */
+async function acquireAuthContext(cleanName: string): Promise<{
+  user: FirebaseUser | null;
+  localFallback: boolean;
+  notice?: string;
+}> {
+  try {
+    let currentUser = auth.currentUser;
+    if (!currentUser) {
+      const cred = await signInAnonymously(auth);
+      currentUser = cred.user;
+    }
+    if (currentUser) {
+      await updateProfile(currentUser, { displayName: cleanName }).catch(() => {});
+    }
+    return { user: currentUser, localFallback: false };
+  } catch (err: unknown) {
+    const errorStr = String(err);
+    const code = (err as { code?: string })?.code || '';
+    if (
+      code === 'auth/identity-toolkit-api-has-not-been-enabled' ||
+      code === 'auth/operation-not-allowed' ||
+      code === 'auth/configuration-not-found' ||
+      code === 'auth/admin-restricted-operation' ||
+      errorStr.includes('identity-toolkit-api-has-not-been-enabled')
+    ) {
+      console.warn('Identity Toolkit API not configured on server. Operating in Local Biometric Vault mode.');
+      const localUid = `bio_user_${normalizeHandle(cleanName)}`;
+      const fallbackUser = {
+        uid: localUid,
+        displayName: cleanName,
+        email: null,
+        isAnonymous: true,
+      } as unknown as FirebaseUser;
+
+      return {
+        user: fallbackUser,
+        localFallback: true,
+        notice: 'Authentication API not configured on server. Local Biometric Vault active.',
+      };
+    }
+    throw err;
+  }
 }
 
 /**
@@ -225,40 +273,18 @@ export async function signUpWithFingerprint(
   const handle = normalizeHandle(cleanName);
 
   if (!cleanName || cleanName.length < 2) {
-    return { success: false, user: null, garage: DEFAULT_USER_GARAGE, error: 'Please enter a valid player name (at least 2 letters).' };
+    return {
+      success: false,
+      user: null,
+      garage: DEFAULT_USER_GARAGE,
+      error: 'Please enter a valid player name (at least 2 letters).',
+    };
   }
 
   try {
-    // 1. Authenticate with Firebase anonymously if not already signed in
-    let currentUser = auth.currentUser;
-    if (!currentUser) {
-      const cred = await signInAnonymously(auth);
-      currentUser = cred.user;
-    }
+    const { user: currentUser, localFallback, notice } = await acquireAuthContext(cleanName);
+    const uid = currentUser ? currentUser.uid : `bio_${handle}`;
 
-    if (currentUser) {
-      await updateProfile(currentUser, { displayName: cleanName });
-    }
-
-    const uid = currentUser.uid;
-
-    // 2. Check if handle already exists
-    const handleDocRef = doc(db, 'player_handles', handle);
-    const existingHandle = await getDoc(handleDocRef);
-    if (existingHandle.exists() && existingHandle.data().userId !== uid) {
-      return { success: false, user: null, garage: DEFAULT_USER_GARAGE, error: `Player name "${cleanName}" is already taken. Please choose another callsign.` };
-    }
-
-    // 3. Register Player Handle in Firestore
-    await setDoc(handleDocRef, {
-      handle,
-      displayName: cleanName,
-      userId: uid,
-      biometricKeyId: fingerprintKeyId,
-      createdAt: new Date().toISOString(),
-    });
-
-    // 4. Create User Garage in Firestore
     const local = loadLocalGarage();
     const newGarage: UserGarageData = {
       ...local,
@@ -269,16 +295,34 @@ export async function signUpWithFingerprint(
       updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(doc(db, 'users', uid), newGarage);
     saveLocalGarage(newGarage);
+    localStorage.setItem(
+      BIOMETRIC_SESSION_KEY,
+      JSON.stringify({ name: cleanName, uid, keyId: fingerprintKeyId })
+    );
 
-    // Save session
-    localStorage.setItem(BIOMETRIC_SESSION_KEY, JSON.stringify({ name: cleanName, uid, keyId: fingerprintKeyId }));
+    // Save to Firestore if cloud backend is available
+    if (!localFallback) {
+      try {
+        const handleDocRef = doc(db, 'player_handles', handle);
+        await setDoc(handleDocRef, {
+          handle,
+          displayName: cleanName,
+          userId: uid,
+          biometricKeyId: fingerprintKeyId,
+          createdAt: new Date().toISOString(),
+        });
+        await setDoc(doc(db, 'users', uid), newGarage);
+      } catch (firestoreErr) {
+        console.warn('Firestore cloud sync notice:', firestoreErr);
+      }
+    }
 
     return {
       success: true,
       user: currentUser,
       garage: newGarage,
+      notice,
     };
   } catch (error) {
     console.error('Biometric Sign Up Error', error);
@@ -302,55 +346,58 @@ export async function loginWithFingerprint(
   const handle = normalizeHandle(cleanName);
 
   if (!cleanName) {
-    return { success: false, user: null, garage: DEFAULT_USER_GARAGE, error: 'Please enter your registered racer name.' };
+    return {
+      success: false,
+      user: null,
+      garage: DEFAULT_USER_GARAGE,
+      error: 'Please enter your registered racer name.',
+    };
   }
 
   try {
-    // 1. Authenticate with Firebase anonymously to acquire auth context
-    let currentUser = auth.currentUser;
-    if (!currentUser) {
-      const cred = await signInAnonymously(auth);
-      currentUser = cred.user;
+    const { user: currentUser, localFallback, notice } = await acquireAuthContext(cleanName);
+    const uid = currentUser ? currentUser.uid : `bio_${handle}`;
+
+    // Check local storage vault first
+    const savedLocal = loadLocalGarage();
+    let loadedGarage: UserGarageData = savedLocal;
+
+    // Attempt Firestore cloud retrieval if cloud auth is operational
+    if (!localFallback) {
+      try {
+        const handleDocRef = doc(db, 'player_handles', handle);
+        const handleSnap = await getDoc(handleDocRef);
+
+        if (handleSnap.exists()) {
+          const targetUserId = handleSnap.data().userId;
+          const userSnap = await getDoc(doc(db, 'users', targetUserId));
+          if (userSnap.exists()) {
+            loadedGarage = userSnap.data() as UserGarageData;
+          }
+        }
+      } catch (firestoreErr) {
+        console.warn('Firestore lookup notice, falling back to local biometric vault:', firestoreErr);
+      }
     }
 
-    // 2. Lookup handle in Firestore
-    const handleDocRef = doc(db, 'player_handles', handle);
-    const handleSnap = await getDoc(handleDocRef);
-
-    if (!handleSnap.exists()) {
-      return {
-        success: false,
-        user: null,
-        garage: DEFAULT_USER_GARAGE,
-        error: `No racer profile found for "${cleanName}". Please sign up first!`,
-      };
-    }
-
-    const handleData = handleSnap.data();
-    const targetUserId = handleData.userId;
-
-    // 3. Fetch the Player's Garage Profile
-    const userDocRef = doc(db, 'users', targetUserId);
-    const userSnap = await getDoc(userDocRef);
-
-    let loadedGarage: UserGarageData;
-    if (userSnap.exists()) {
-      loadedGarage = userSnap.data() as UserGarageData;
-    } else {
-      loadedGarage = {
-        ...DEFAULT_USER_GARAGE,
-        displayName: handleData.displayName || cleanName,
-        fingerprintAuth: true,
-      };
-    }
+    // Ensure display name is maintained
+    loadedGarage = {
+      ...loadedGarage,
+      displayName: cleanName,
+      fingerprintAuth: true,
+    };
 
     saveLocalGarage(loadedGarage);
-    localStorage.setItem(BIOMETRIC_SESSION_KEY, JSON.stringify({ name: cleanName, uid: targetUserId, keyId: fingerprintKeyId }));
+    localStorage.setItem(
+      BIOMETRIC_SESSION_KEY,
+      JSON.stringify({ name: cleanName, uid, keyId: fingerprintKeyId })
+    );
 
     return {
       success: true,
       user: currentUser,
       garage: loadedGarage,
+      notice,
     };
   } catch (error) {
     console.error('Biometric Login Error', error);

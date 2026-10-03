@@ -70,8 +70,8 @@ export const RaceFinishedModal: React.FC<RaceFinishedModalProps> = ({
   }, []);
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
-      <div className="w-full max-w-xl bg-slate-900 border border-slate-700/80 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col gap-6 text-white relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+      <div className="w-full max-w-xl max-h-[90dvh] overflow-y-auto bg-slate-900 border border-slate-700/80 rounded-3xl p-5 sm:p-7 shadow-2xl flex flex-col gap-5 text-white relative my-auto">
         {/* Glow ambient background */}
         <div className="absolute -right-20 -top-20 w-60 h-60 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-20 -bottom-20 w-60 h-60 bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />

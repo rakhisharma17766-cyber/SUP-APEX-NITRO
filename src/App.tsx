@@ -102,10 +102,14 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const handleBiometricSuccess = (user: FirebaseUser, garage: UserGarageData) => {
+  const handleBiometricSuccess = (user: FirebaseUser, garage: UserGarageData, notice?: string) => {
     setCurrentUser(user);
     setGarageData(garage);
-    triggerHUDAlert(`WELCOME ${garage.displayName.toUpperCase()}! BIOMETRIC DATA LOADED`);
+    if (notice) {
+      triggerHUDAlert(notice);
+    } else {
+      triggerHUDAlert(`WELCOME ${garage.displayName.toUpperCase()}! BIOMETRICS VERIFIED`);
+    }
   };
 
   const handleSignOut = async () => {
@@ -267,12 +271,22 @@ export default function App() {
   );
 
   const handleStartSoloRace = (length: number, theme: TrackThemeId) => {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch {}
     setActiveTrackLength(length);
     setActiveTrackTheme(theme);
     initializeRace(length, theme, null);
   };
 
   const handleStartMultiplayerRace = (roomId: string, length: number, theme: TrackThemeId) => {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch {}
     setActiveTrackLength(length);
     setActiveTrackTheme(theme);
     initializeRace(length, theme, roomId);
@@ -469,7 +483,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative w-full min-h-screen bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="relative w-full min-h-[100dvh] bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
       {/* 1. Main Garage View (Clean, Scrollable, Professional) */}
       {gameMode === 'garage' && (
         <GarageMenu
@@ -489,9 +503,9 @@ export default function App() {
         />
       )}
 
-      {/* 2. Active 3D Race View - Locked to Viewport (Zero Scroll Glitches) */}
+      {/* 2. Active 3D Race View - Locked to Dynamic Viewport (Zero Scroll Glitches) */}
       {gameMode === 'racing' && trackData && playerEntityRef.current && physicsEngineRef.current && (
-        <div className="fixed inset-0 z-50 w-screen h-screen flex items-center justify-center bg-slate-950 overflow-hidden touch-none select-none">
+        <div className="fixed inset-0 z-50 w-screen h-[100dvh] flex items-center justify-center bg-slate-950 overflow-hidden touch-none select-none pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
           <div
             className={`relative overflow-hidden w-full h-full flex items-center justify-center ${
               orientationMode === 'landscape'

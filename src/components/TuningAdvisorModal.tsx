@@ -40,8 +40,8 @@ export const TuningAdvisorModal: React.FC<TuningAdvisorModalProps> = ({
   }, [carId, themeId, trackLength, upgrades]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className="w-full max-w-lg bg-slate-900 border border-cyan-500/40 rounded-3xl p-6 shadow-2xl flex flex-col gap-5 text-white relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
+      <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-slate-900 border border-cyan-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col gap-5 text-white relative my-auto">
         {/* Close Button */}
         <button
           onClick={onClose}

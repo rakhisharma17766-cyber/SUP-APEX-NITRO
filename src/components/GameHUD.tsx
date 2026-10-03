@@ -58,7 +58,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   } = hudState;
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 md:p-5 overflow-hidden z-20 touch-none">
+    <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 md:p-5 overflow-hidden z-20 touch-none pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] px-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]">
       {/* Top Header: Position Badge, Global Track Progress, Sound & Settings */}
       <div className="flex flex-col gap-2 w-full max-w-5xl mx-auto">
         <div className="flex items-center justify-between pointer-events-auto">

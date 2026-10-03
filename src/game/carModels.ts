@@ -9,6 +9,34 @@ export interface CarModelInstance {
   disposables: { geometry?: THREE.BufferGeometry; material?: THREE.Material }[];
 }
 
+let sharedEnvMap: THREE.CubeTexture | null = null;
+
+function getSharedReflectionEnvMap(): THREE.CubeTexture {
+  if (sharedEnvMap) return sharedEnvMap;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const grad = ctx.createLinearGradient(0, 0, 0, 128);
+      grad.addColorStop(0, '#38bdf8');
+      grad.addColorStop(0.46, '#0284c7');
+      grad.addColorStop(0.5, '#ffffff'); // Horizon glare highlight
+      grad.addColorStop(0.54, '#1e293b');
+      grad.addColorStop(1, '#0f172a');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+    }
+    const images = [canvas, canvas, canvas, canvas, canvas, canvas];
+    sharedEnvMap = new THREE.CubeTexture(images);
+    sharedEnvMap.needsUpdate = true;
+    return sharedEnvMap;
+  } catch {
+    return new THREE.CubeTexture();
+  }
+}
+
 export function createCarModel(
   carId: string,
   customColor?: string
@@ -23,41 +51,55 @@ export function createCarModel(
   const headlights: THREE.Mesh[] = [];
   const disposables: { geometry?: THREE.BufferGeometry; material?: THREE.Material }[] = [];
 
-  // Common materials
+  const reflectionEnv = getSharedReflectionEnvMap();
+
+  // Premium Metallic Materials
   const bodyMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(primaryColor),
-    roughness: 0.35,
-    metalness: 0.65,
+    roughness: 0.22,
+    metalness: 0.85,
+    envMap: reflectionEnv,
+    envMapIntensity: 1.5,
     flatShading: true,
   });
   const accentMat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(accentColor),
-    roughness: 0.4,
-    metalness: 0.5,
+    roughness: 0.26,
+    metalness: 0.75,
+    envMap: reflectionEnv,
+    envMapIntensity: 1.3,
     flatShading: true,
   });
   const blackMat = new THREE.MeshStandardMaterial({
-    color: 0x111827,
-    roughness: 0.8,
-    metalness: 0.2,
+    color: 0x0f172a,
+    roughness: 0.45,
+    metalness: 0.6,
+    envMap: reflectionEnv,
+    envMapIntensity: 0.8,
     flatShading: true,
   });
   const glassMat = new THREE.MeshStandardMaterial({
-    color: 0x0284c7,
-    roughness: 0.1,
-    metalness: 0.9,
+    color: 0x38bdf8,
+    roughness: 0.08,
+    metalness: 0.95,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.88,
+    envMap: reflectionEnv,
+    envMapIntensity: 2.2,
     flatShading: true,
   });
-  const wheelRubberMat = new THREE.MeshLambertMaterial({
-    color: 0x1f242d,
+  const wheelRubberMat = new THREE.MeshStandardMaterial({
+    color: 0x18181b,
+    roughness: 0.85,
+    metalness: 0.15,
     flatShading: true,
   });
   const wheelRimMat = new THREE.MeshStandardMaterial({
-    color: 0xe2e8f0,
-    metalness: 0.8,
-    roughness: 0.2,
+    color: 0xf1f5f9,
+    metalness: 0.95,
+    roughness: 0.14,
+    envMap: reflectionEnv,
+    envMapIntensity: 1.8,
     flatShading: true,
   });
   const headlightMat = new THREE.MeshBasicMaterial({

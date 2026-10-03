@@ -44,19 +44,30 @@ export const GarageStage: React.FC<GarageStageProps> = ({ carId, customColor }) 
     dom.style.display = 'block';
     container.appendChild(dom);
 
-    // Stage Lighting
-    const ambient = new THREE.AmbientLight(0xffffff, 1.2);
+    // Upgraded Studio Stage Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 2.2);
     scene.add(ambient);
 
-    const spotLight1 = new THREE.SpotLight(0x38bdf8, 3.5, 20, Math.PI / 4, 0.5);
-    spotLight1.position.set(4, 6, 4);
+    const hemiLight = new THREE.HemisphereLight(0x38bdf8, 0x1e293b, 1.8);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0xfff7ed, 3.0);
+    keyLight.position.set(5, 8, 6);
+    scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x06b6d4, 2.4);
+    rimLight.position.set(-5, 6, -5);
+    scene.add(rimLight);
+
+    const spotLight1 = new THREE.SpotLight(0x38bdf8, 4.0, 25, Math.PI / 4, 0.4);
+    spotLight1.position.set(4, 7, 4);
     scene.add(spotLight1);
 
-    const spotLight2 = new THREE.SpotLight(0xf43f5e, 2.5, 20, Math.PI / 4, 0.5);
-    spotLight2.position.set(-4, 5, -3);
+    const spotLight2 = new THREE.SpotLight(0xf43f5e, 3.0, 25, Math.PI / 4, 0.4);
+    spotLight2.position.set(-4, 6, -3);
     scene.add(spotLight2);
 
-    const bottomGlow = new THREE.PointLight(0x06b6d4, 2, 8);
+    const bottomGlow = new THREE.PointLight(0x06b6d4, 2.8, 10);
     bottomGlow.position.set(0, 0.1, 0);
     scene.add(bottomGlow);
 

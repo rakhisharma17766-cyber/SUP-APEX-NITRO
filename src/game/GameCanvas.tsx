@@ -80,7 +80,7 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
     // 1. Three.js Scene, Camera, Renderer
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(track.theme.skyColor);
-    scene.fog = new THREE.FogExp2(track.theme.fogColor, 0.0035);
+    scene.fog = new THREE.FogExp2(track.theme.fogColor, 0.003);
 
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.5, 1200);
 
@@ -89,11 +89,12 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
       powerPreference: 'high-performance',
       stencil: false,
     });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height, false);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.35;
     const dom = renderer.domElement;
     dom.style.width = '100%';
     dom.style.height = '100%';
@@ -101,22 +102,32 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
     dom.style.touchAction = 'none';
     container.appendChild(dom);
 
-    // 2. Lighting
-    const ambientLight = new THREE.AmbientLight(track.theme.ambientColor, 1.4);
+    // 2. High-Fidelity Studio & Track Lighting Setup
+    const ambientLight = new THREE.AmbientLight(track.theme.ambientColor, 2.4);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(track.theme.dirLightColor, 2.2);
-    dirLight.position.set(40, 70, 30);
+    const hemiLight = new THREE.HemisphereLight(0x7dd3fc, 0x1e293b, 1.8);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(track.theme.dirLightColor, 3.4);
+    dirLight.position.set(40, 75, 30);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    dirLight.shadow.camera.near = 10;
-    dirLight.shadow.camera.far = 250;
-    dirLight.shadow.camera.left = -30;
-    dirLight.shadow.camera.right = 30;
-    dirLight.shadow.camera.top = 30;
-    dirLight.shadow.camera.bottom = -30;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.bias = -0.0003;
+    dirLight.shadow.radius = 3.5;
+    dirLight.shadow.camera.near = 5;
+    dirLight.shadow.camera.far = 280;
+    dirLight.shadow.camera.left = -35;
+    dirLight.shadow.camera.right = 35;
+    dirLight.shadow.camera.top = 35;
+    dirLight.shadow.camera.bottom = -35;
     scene.add(dirLight);
+
+    // Neon Rim Backlight for vehicle silhouette definition
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 2.0);
+    rimLight.position.set(-30, 45, -40);
+    scene.add(rimLight);
 
     // 3. Build Procedural Track Scene
     const trackScene = buildTrackScene(track);
@@ -137,8 +148,8 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
       carModelInstances.set(bot.entity.id, botModel);
     });
 
-    // 5. Particle System for Nitro Spark Trails
-    const particleCount = 180;
+    // 5. Particle Systems with Object Pooling (Nitro & Weather)
+    const particleCount = 200;
     const particleGeo = new THREE.BufferGeometry();
     const particlePositions = new Float32Array(particleCount * 3);
     const particleColors = new Float32Array(particleCount * 3);
@@ -164,10 +175,10 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
     particleGeo.setAttribute('size', new THREE.BufferAttribute(particleSizes, 1));
 
     const particleMat = new THREE.PointsMaterial({
-      size: 0.8,
+      size: 0.85,
       vertexColors: true,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -180,10 +191,48 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
       const pIdx = particleHead;
       particlePositions[pIdx * 3 + 0] = origin.x + (Math.random() - 0.5) * 0.4;
       particlePositions[pIdx * 3 + 1] = origin.y + 0.3 + (Math.random() - 0.5) * 0.2;
-      particlePositions[pIdx * 3 + 2] = origin.z - 1.8;
+      particlePositions[pIdx * 3 + 2] = origin.z - 1.6;
+
+      particleSizes[pIdx] = 1.0 + Math.random() * 0.8;
       particleLifes[pIdx] = 1.0;
       particleHead = (particleHead + 1) % particleCount;
     };
+
+    // Weather Effects: Rain Streaks or Desert Sandstorm Embers
+    const isRain = track.theme.id !== 'desert';
+    const weatherCount = 350;
+    const weatherGeo = new THREE.BufferGeometry();
+    const weatherPositions = new Float32Array(weatherCount * 3);
+    const weatherVelocities = new Float32Array(weatherCount * 3);
+
+    for (let i = 0; i < weatherCount; i++) {
+      weatherPositions[i * 3 + 0] = (Math.random() - 0.5) * 50;
+      weatherPositions[i * 3 + 1] = Math.random() * 25;
+      weatherPositions[i * 3 + 2] = (Math.random() - 0.5) * 70;
+
+      if (isRain) {
+        weatherVelocities[i * 3 + 0] = -1.5; // diagonal wind
+        weatherVelocities[i * 3 + 1] = -(40 + Math.random() * 20); // downward fall
+        weatherVelocities[i * 3 + 2] = -2.0;
+      } else {
+        // Desert sand embers
+        weatherVelocities[i * 3 + 0] = 5 + Math.random() * 8; // cross wind
+        weatherVelocities[i * 3 + 1] = (Math.random() - 0.4) * 2; // slight float
+        weatherVelocities[i * 3 + 2] = 4 + Math.random() * 6;
+      }
+    }
+
+    weatherGeo.setAttribute('position', new THREE.BufferAttribute(weatherPositions, 3));
+    const weatherMat = new THREE.PointsMaterial({
+      color: isRain ? 0x93c5fd : 0xfbbf24,
+      size: isRain ? 0.35 : 0.6,
+      transparent: true,
+      opacity: isRain ? 0.65 : 0.75,
+      blending: isRain ? THREE.NormalBlending : THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const weatherSystem = new THREE.Points(weatherGeo, weatherMat);
+    scene.add(weatherSystem);
 
     // 6. Camera Chase Positioning vectors
     const cameraIdealOffset = new THREE.Vector3(0, 5.2, -8.8);
@@ -346,6 +395,26 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
       }
       particleGeo.attributes.position.needsUpdate = true;
 
+      // 9b. Update Weather Particles (Rain Streaks / Desert Sandstorm Embers)
+      const pZ = playerEntity.currentZ;
+      for (let i = 0; i < weatherCount; i++) {
+        weatherPositions[i * 3 + 0] += weatherVelocities[i * 3 + 0] * delta;
+        weatherPositions[i * 3 + 1] += weatherVelocities[i * 3 + 1] * delta;
+        weatherPositions[i * 3 + 2] += weatherVelocities[i * 3 + 2] * delta;
+
+        // Wrap around player view frustum
+        if (weatherPositions[i * 3 + 1] < 0) {
+          weatherPositions[i * 3 + 1] = 22 + Math.random() * 5;
+          weatherPositions[i * 3 + 0] = (Math.random() - 0.5) * 45;
+          weatherPositions[i * 3 + 2] = pZ + (Math.random() - 0.3) * 60;
+        }
+        if (Math.abs(weatherPositions[i * 3 + 2] - pZ) > 60) {
+          weatherPositions[i * 3 + 2] = pZ + (Math.random() - 0.2) * 55;
+          weatherPositions[i * 3 + 1] = Math.random() * 20;
+        }
+      }
+      weatherGeo.attributes.position.needsUpdate = true;
+
       // 10. 2.5D Isometric Chase Camera Follow
       const pCenter = track.getTrackCenter(playerEntity.currentZ);
       const playerPos = new THREE.Vector3(
@@ -414,12 +483,14 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
       }
     };
     window.addEventListener('resize', handleWindowResize);
+    window.addEventListener('orientationchange', handleWindowResize);
 
     // Cleanup
     return () => {
       cancelAnimationFrame(animationFrameId);
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('orientationchange', handleWindowResize);
       soundSynth.stopEngine();
 
       carModelInstances.forEach((car) => {
@@ -437,6 +508,10 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
       particleGeo.dispose();
       particleMat.dispose();
       scene.remove(particleSystem);
+
+      weatherGeo.dispose();
+      weatherMat.dispose();
+      scene.remove(weatherSystem);
 
       renderer.dispose();
       if (container.contains(dom)) {

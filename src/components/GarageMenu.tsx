@@ -138,7 +138,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
   const hasBiometric = !!(user && garageData.fingerprintAuth);
 
   return (
-    <div className="w-full min-h-screen overflow-y-auto bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col justify-between gap-8 select-none">
+    <div className="w-full min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col justify-between gap-8">
       {/* 1. TOP NAVIGATION HEADER */}
       <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -270,7 +270,9 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
 
         {/* 3D Turntable Stage with Carousel Controls */}
         <div className="relative w-full h-80 md:h-96 bg-slate-950/80 rounded-3xl border border-slate-800/80 overflow-hidden flex items-center justify-center shadow-inner">
-          <GarageStage carId={activeCarId} customColor={selectedColor} />
+          <div className="w-full h-full pointer-events-none">
+            <GarageStage carId={activeCarId} customColor={selectedColor} />
+          </div>
 
           {/* Left / Right Carousel Buttons */}
           <button

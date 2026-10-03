@@ -15,26 +15,34 @@ export const GarageStage: React.FC<GarageStageProps> = ({ carId, customColor }) 
     if (!container) return;
 
     let animId: number;
-    const width = container.clientWidth || 400;
-    const height = container.clientHeight || 300;
+    let isDisposed = false;
+
+    const width = Math.max(container.clientWidth || 400, 100);
+    const height = Math.max(container.clientHeight || 300, 100);
 
     const scene = new THREE.Scene();
-    scene.background = null; // Transparent background for glassmorphism integration
+    scene.background = null;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 2.5, 5.8);
-    camera.lookAt(0, 0.6, 0);
+    camera.position.set(0, 2.4, 5.8);
+    camera.lookAt(0, 0.55, 0);
 
     const renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: true,
       powerPreference: 'high-performance',
+      stencil: false,
     });
-    renderer.setSize(width, height);
+    renderer.setSize(width, height, false);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.3;
-    container.appendChild(renderer.domElement);
+
+    const dom = renderer.domElement;
+    dom.style.width = '100%';
+    dom.style.height = '100%';
+    dom.style.display = 'block';
+    container.appendChild(dom);
 
     // Stage Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 1.2);
@@ -78,6 +86,7 @@ export const GarageStage: React.FC<GarageStageProps> = ({ carId, customColor }) 
     // Rotate Turntable Animation
     let angle = 0;
     const animate = () => {
+      if (isDisposed) return;
       animId = requestAnimationFrame(animate);
       angle += 0.008;
       carModel.mesh.rotation.y = angle;
@@ -85,30 +94,33 @@ export const GarageStage: React.FC<GarageStageProps> = ({ carId, customColor }) 
     };
     animate();
 
-    const handleResize = () => {
-      if (!container) return;
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    window.addEventListener('resize', handleResize);
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width: w, height: h } = entry.contentRect;
+        if (w > 0 && h > 0) {
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+          renderer.setSize(w, h, false);
+        }
+      }
+    });
+    resizeObserver.observe(container);
 
     return () => {
+      isDisposed = true;
       cancelAnimationFrame(animId);
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
       disposeCarModel(carModel);
       platformGeo.dispose();
       platformMat.dispose();
       ringGeo.dispose();
       ringMat.dispose();
       renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
+      if (container.contains(dom)) {
+        container.removeChild(dom);
       }
     };
   }, [carId, customColor]);
 
-  return <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />;
+  return <div ref={mountRef} className="w-full h-full relative" />;
 };

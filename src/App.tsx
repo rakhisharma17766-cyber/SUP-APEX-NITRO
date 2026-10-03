@@ -464,8 +464,12 @@ export default function App() {
     setIsAudioMuted(muted);
   };
 
+  const handleRaceFinished = useCallback(() => {
+    setGameMode('finished');
+  }, []);
+
   return (
-    <div className="relative w-screen min-h-screen bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
+    <div className="relative w-full min-h-screen bg-slate-950 text-slate-100 font-['Plus_Jakarta_Sans',sans-serif]">
       {/* 1. Main Garage View (Clean, Scrollable, Professional) */}
       {gameMode === 'garage' && (
         <GarageMenu
@@ -506,7 +510,7 @@ export default function App() {
               inputRef={inputRef}
               onHudUpdate={setHudState}
               onCollisionEvent={handleCollisionEvent}
-              onRaceFinished={() => setGameMode('finished')}
+              onRaceFinished={handleRaceFinished}
               countdown={countdown}
             />
 

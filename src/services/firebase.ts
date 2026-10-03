@@ -3,9 +3,11 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInAnonymously,
   signOut as fbSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
+  updateProfile,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -19,15 +21,17 @@ import {
   deleteDoc,
   serverTimestamp,
   getDocs,
+  query,
+  where,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase
+// Initialize Firebase App & Services
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-export { signInWithPopup, fbSignOut as signOut, onAuthStateChanged };
+export { signInWithPopup, signInAnonymously, fbSignOut as signOut, onAuthStateChanged };
 
 export enum OperationType {
   CREATE = 'create',
@@ -81,7 +85,9 @@ export async function testFirestoreConnection(): Promise<boolean> {
 
 export interface UserGarageData {
   displayName: string;
-  email: string;
+  email?: string;
+  fingerprintAuth?: boolean;
+  biometricKeyId?: string;
   coins: number;
   activeCarId: string;
   unlockedCars: string[];
@@ -104,33 +110,17 @@ export interface UserGarageData {
 }
 
 export const DEFAULT_USER_GARAGE: UserGarageData = {
-  displayName: 'Apex Driver',
-  email: '',
-  coins: 1500,
+  displayName: 'Apex Racer',
+  coins: 2500,
   activeCarId: 'red_storm',
   unlockedCars: ['red_storm'],
   upgrades: {
-    red_storm: {
-      topSpeed: 1,
-      acceleration: 1,
-      heavyArmor: 1,
-      nitroDuration: 1,
-      nitroPower: 1,
-    },
-    cyber_beast: {
-      topSpeed: 1,
-      acceleration: 1,
-      heavyArmor: 1,
-      nitroDuration: 1,
-      nitroPower: 1,
-    },
-    nitro_apex: {
-      topSpeed: 1,
-      acceleration: 1,
-      heavyArmor: 1,
-      nitroDuration: 1,
-      nitroPower: 1,
-    },
+    red_storm: { topSpeed: 1, acceleration: 1, heavyArmor: 1, nitroDuration: 1, nitroPower: 1 },
+    cyber_beast: { topSpeed: 1, acceleration: 1, heavyArmor: 1, nitroDuration: 1, nitroPower: 1 },
+    nitro_apex: { topSpeed: 1, acceleration: 1, heavyArmor: 1, nitroDuration: 1, nitroPower: 1 },
+    phantom_gt: { topSpeed: 1, acceleration: 1, heavyArmor: 1, nitroDuration: 1, nitroPower: 1 },
+    vortex_electric: { topSpeed: 1, acceleration: 1, heavyArmor: 1, nitroDuration: 1, nitroPower: 1 },
+    titan_crusher: { topSpeed: 1, acceleration: 1, heavyArmor: 1, nitroDuration: 1, nitroPower: 1 },
   },
   stats: {
     racesPlayed: 0,
@@ -141,6 +131,7 @@ export const DEFAULT_USER_GARAGE: UserGarageData = {
 };
 
 const LOCAL_STORAGE_KEY = 'sup_nitro_user_garage';
+const BIOMETRIC_SESSION_KEY = 'sup_nitro_biometric_user';
 
 export function loadLocalGarage(): UserGarageData {
   try {
@@ -204,22 +195,188 @@ export async function saveUserGarage(user: FirebaseUser | null, data: UserGarage
       { merge: true }
     );
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, userPath);
+    handleFirestoreError(err, OperationType.WRITE, userPath);
   }
 }
 
-// Multiplayer Room Models
-export interface RoomData {
-  id: string;
-  code: string;
-  hostId: string;
-  hostName: string;
-  trackLength: number; // 1000, 2500, 5000
-  trackTheme: 'cyber' | 'desert' | 'beach';
-  status: 'waiting' | 'countdown' | 'in_race' | 'finished';
-  createdAt: string;
-  updatedAt: string;
+// -------------------------------------------------------------
+// BIOMETRIC FINGERPRINT PASSWORDLESS AUTHENTICATION
+// -------------------------------------------------------------
+
+export interface BiometricAuthResult {
+  success: boolean;
+  user: FirebaseUser | null;
+  garage: UserGarageData;
+  error?: string;
 }
+
+function normalizeHandle(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+
+/**
+ * Sign Up with Player Name and Fingerprint Biometric
+ */
+export async function signUpWithFingerprint(
+  playerName: string,
+  fingerprintKeyId: string
+): Promise<BiometricAuthResult> {
+  const cleanName = playerName.trim();
+  const handle = normalizeHandle(cleanName);
+
+  if (!cleanName || cleanName.length < 2) {
+    return { success: false, user: null, garage: DEFAULT_USER_GARAGE, error: 'Please enter a valid player name (at least 2 letters).' };
+  }
+
+  try {
+    // 1. Authenticate with Firebase anonymously if not already signed in
+    let currentUser = auth.currentUser;
+    if (!currentUser) {
+      const cred = await signInAnonymously(auth);
+      currentUser = cred.user;
+    }
+
+    if (currentUser) {
+      await updateProfile(currentUser, { displayName: cleanName });
+    }
+
+    const uid = currentUser.uid;
+
+    // 2. Check if handle already exists
+    const handleDocRef = doc(db, 'player_handles', handle);
+    const existingHandle = await getDoc(handleDocRef);
+    if (existingHandle.exists() && existingHandle.data().userId !== uid) {
+      return { success: false, user: null, garage: DEFAULT_USER_GARAGE, error: `Player name "${cleanName}" is already taken. Please choose another callsign.` };
+    }
+
+    // 3. Register Player Handle in Firestore
+    await setDoc(handleDocRef, {
+      handle,
+      displayName: cleanName,
+      userId: uid,
+      biometricKeyId: fingerprintKeyId,
+      createdAt: new Date().toISOString(),
+    });
+
+    // 4. Create User Garage in Firestore
+    const local = loadLocalGarage();
+    const newGarage: UserGarageData = {
+      ...local,
+      displayName: cleanName,
+      fingerprintAuth: true,
+      biometricKeyId: fingerprintKeyId,
+      coins: Math.max(local.coins, 2500),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await setDoc(doc(db, 'users', uid), newGarage);
+    saveLocalGarage(newGarage);
+
+    // Save session
+    localStorage.setItem(BIOMETRIC_SESSION_KEY, JSON.stringify({ name: cleanName, uid, keyId: fingerprintKeyId }));
+
+    return {
+      success: true,
+      user: currentUser,
+      garage: newGarage,
+    };
+  } catch (error) {
+    console.error('Biometric Sign Up Error', error);
+    return {
+      success: false,
+      user: null,
+      garage: DEFAULT_USER_GARAGE,
+      error: error instanceof Error ? error.message : 'Biometric sign up failed. Please try again.',
+    };
+  }
+}
+
+/**
+ * Log In with Player Name and Fingerprint Biometric
+ */
+export async function loginWithFingerprint(
+  playerName: string,
+  fingerprintKeyId: string
+): Promise<BiometricAuthResult> {
+  const cleanName = playerName.trim();
+  const handle = normalizeHandle(cleanName);
+
+  if (!cleanName) {
+    return { success: false, user: null, garage: DEFAULT_USER_GARAGE, error: 'Please enter your registered racer name.' };
+  }
+
+  try {
+    // 1. Authenticate with Firebase anonymously to acquire auth context
+    let currentUser = auth.currentUser;
+    if (!currentUser) {
+      const cred = await signInAnonymously(auth);
+      currentUser = cred.user;
+    }
+
+    // 2. Lookup handle in Firestore
+    const handleDocRef = doc(db, 'player_handles', handle);
+    const handleSnap = await getDoc(handleDocRef);
+
+    if (!handleSnap.exists()) {
+      return {
+        success: false,
+        user: null,
+        garage: DEFAULT_USER_GARAGE,
+        error: `No racer profile found for "${cleanName}". Please sign up first!`,
+      };
+    }
+
+    const handleData = handleSnap.data();
+    const targetUserId = handleData.userId;
+
+    // 3. Fetch the Player's Garage Profile
+    const userDocRef = doc(db, 'users', targetUserId);
+    const userSnap = await getDoc(userDocRef);
+
+    let loadedGarage: UserGarageData;
+    if (userSnap.exists()) {
+      loadedGarage = userSnap.data() as UserGarageData;
+    } else {
+      loadedGarage = {
+        ...DEFAULT_USER_GARAGE,
+        displayName: handleData.displayName || cleanName,
+        fingerprintAuth: true,
+      };
+    }
+
+    saveLocalGarage(loadedGarage);
+    localStorage.setItem(BIOMETRIC_SESSION_KEY, JSON.stringify({ name: cleanName, uid: targetUserId, keyId: fingerprintKeyId }));
+
+    return {
+      success: true,
+      user: currentUser,
+      garage: loadedGarage,
+    };
+  } catch (error) {
+    console.error('Biometric Login Error', error);
+    return {
+      success: false,
+      user: null,
+      garage: DEFAULT_USER_GARAGE,
+      error: error instanceof Error ? error.message : 'Biometric authentication failed.',
+    };
+  }
+}
+
+export function getSavedBiometricHandle(): string | null {
+  try {
+    const raw = localStorage.getItem(BIOMETRIC_SESSION_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return parsed.name || null;
+    }
+  } catch {}
+  return null;
+}
+
+// -------------------------------------------------------------
+// MULTIPLAYER ROOMS & NETWORK TICKS
+// -------------------------------------------------------------
 
 export interface RoomPlayerState {
   playerId: string;
@@ -228,48 +385,44 @@ export interface RoomPlayerState {
   color: string;
   isHost: boolean;
   isReady: boolean;
-  isBot?: boolean;
   x: number;
   z: number;
   lane: number;
   speed: number;
   nitroActive: boolean;
   finished: boolean;
-  finishTime?: number;
+  finishTime: number;
   rank: number;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export async function createMultiplayerRoom(
-  hostUser: FirebaseUser,
+  user: FirebaseUser,
   code: string,
   trackLength: number,
-  trackTheme: 'cyber' | 'desert' | 'beach',
+  trackTheme: string,
   carId: string
 ): Promise<string> {
-  const roomId = 'room_' + code;
-  const roomPath = `rooms/${roomId}`;
-  const now = new Date().toISOString();
+  const roomRef = doc(collection(db, 'rooms'));
+  const roomId = roomRef.id;
 
   try {
-    const roomRef = doc(db, 'rooms', roomId);
     await setDoc(roomRef, {
-      code,
-      hostId: hostUser.uid,
-      hostName: hostUser.displayName || 'Host Racer',
+      hostId: user.uid,
+      code: code.toUpperCase(),
       trackLength,
       trackTheme,
       status: 'waiting',
-      createdAt: now,
-      updatedAt: now,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
-    const playerRef = doc(db, 'rooms', roomId, 'players', hostUser.uid);
+    const playerRef = doc(db, 'rooms', roomId, 'players', user.uid);
     await setDoc(playerRef, {
-      playerId: hostUser.uid,
-      displayName: hostUser.displayName || 'Host Racer',
+      playerId: user.uid,
+      displayName: user.displayName || 'Apex Host',
       carId,
-      color: '#06b6d4',
+      color: '#ef4444',
       isHost: true,
       isReady: true,
       x: 0,
@@ -278,13 +431,14 @@ export async function createMultiplayerRoom(
       speed: 0,
       nitroActive: false,
       finished: false,
+      finishTime: 0,
       rank: 1,
-      updatedAt: now,
+      updatedAt: new Date().toISOString(),
     });
 
     return roomId;
   } catch (err) {
-    throw handleFirestoreError(err, OperationType.CREATE, roomPath);
+    throw handleFirestoreError(err, OperationType.CREATE, `rooms/${roomId}`);
   }
 }
 
@@ -292,66 +446,74 @@ export async function joinMultiplayerRoom(
   user: FirebaseUser,
   code: string,
   carId: string
-): Promise<string | null> {
-  const roomId = 'room_' + code;
-  const roomPath = `rooms/${roomId}`;
+): Promise<string> {
   try {
-    const roomSnap = await getDoc(doc(db, 'rooms', roomId));
-    if (!roomSnap.exists()) {
-      return null;
+    const q = query(collection(db, 'rooms'), where('code', '==', code.toUpperCase()));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      throw new Error(`Room with code "${code}" not found.`);
     }
-    const now = new Date().toISOString();
+
+    const roomDoc = snap.docs[0];
+    const roomId = roomDoc.id;
+
     const playerRef = doc(db, 'rooms', roomId, 'players', user.uid);
     await setDoc(playerRef, {
       playerId: user.uid,
-      displayName: user.displayName || 'Challenger',
+      displayName: user.displayName || 'Apex Racer',
       carId,
-      color: '#f43f5e',
+      color: '#06b6d4',
       isHost: false,
-      isReady: true,
+      isReady: false,
       x: 0,
       z: 0,
       lane: 2,
       speed: 0,
       nitroActive: false,
       finished: false,
+      finishTime: 0,
       rank: 2,
-      updatedAt: now,
-    });
-    return roomId;
-  } catch (err) {
-    throw handleFirestoreError(err, OperationType.GET, roomPath);
-  }
-}
-
-export async function updatePlayerRaceTick(
-  roomId: string,
-  playerId: string,
-  data: Partial<RoomPlayerState>
-) {
-  const path = `rooms/${roomId}/players/${playerId}`;
-  try {
-    await updateDoc(doc(db, 'rooms', roomId, 'players', playerId), {
-      ...data,
       updatedAt: new Date().toISOString(),
     });
+
+    return roomId;
   } catch (err) {
-    // Non-blocking tick failure
-    console.debug('Player tick update skipped:', err);
+    throw handleFirestoreError(err, OperationType.GET, 'rooms');
   }
 }
 
-export async function updateRoomStatus(
-  roomId: string,
-  status: 'waiting' | 'countdown' | 'in_race' | 'finished'
-) {
-  const path = `rooms/${roomId}`;
+export async function updateRoomStatus(roomId: string, status: string) {
   try {
     await updateDoc(doc(db, 'rooms', roomId), {
       status,
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, path);
+    throw handleFirestoreError(err, OperationType.UPDATE, `rooms/${roomId}`);
+  }
+}
+
+export function updatePlayerRaceTick(
+  roomId: string,
+  playerId: string,
+  tickData: {
+    x: number;
+    z: number;
+    lane: number;
+    speed: number;
+    nitroActive: boolean;
+    finished: boolean;
+    finishTime: number;
+    rank: number;
+  }
+) {
+  try {
+    const playerRef = doc(db, 'rooms', roomId, 'players', playerId);
+    updateDoc(playerRef, {
+      ...tickData,
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {});
+  } catch {
+    // Non-blocking UDP-style network tick
   }
 }

@@ -37,7 +37,7 @@ interface GameCanvasProps {
   isPaused?: boolean;
 }
 
-export const GameCanvas: React.FC<GameCanvasProps> = ({
+const GameCanvasComponent: React.FC<GameCanvasProps> = ({
   track,
   playerEntity,
   botDrivers,
@@ -94,8 +94,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.15;
-    container.appendChild(renderer.domElement);
+    const dom = renderer.domElement;
+    dom.style.width = '100%';
+    dom.style.height = '100%';
+    dom.style.display = 'block';
+    dom.style.touchAction = 'none';
+    container.appendChild(dom);
 
     // 2. Lighting
     const ambientLight = new THREE.AmbientLight(track.theme.ambientColor, 1.4);
@@ -386,21 +390,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     animationFrameId = requestAnimationFrame(animate);
 
-    // Resize Handler
-    const handleResize = () => {
+    // Robust Responsive ResizeObserver (Handles orientation & iframe resizes)
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height, false);
+        }
+      }
+    });
+    resizeObserver.observe(container);
+
+    const handleWindowResize = () => {
       if (!container) return;
       const w = container.clientWidth || window.innerWidth;
       const h = container.clientHeight || window.innerHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
+      if (w > 0 && h > 0) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+      }
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleWindowResize);
 
     // Cleanup
     return () => {
       cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', handleWindowResize);
       soundSynth.stopEngine();
 
       carModelInstances.forEach((car) => {
@@ -420,11 +439,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       scene.remove(particleSystem);
 
       renderer.dispose();
-      if (container.contains(renderer.domElement)) {
-        container.removeChild(renderer.domElement);
+      if (container.contains(dom)) {
+        container.removeChild(dom);
       }
     };
   }, [track, playerEntity, botDrivers, opponentRacersMap, physics]);
 
-  return <div ref={mountRef} className="w-full h-full absolute inset-0 select-none overflow-hidden" />;
+  return <div ref={mountRef} className="w-full h-full absolute inset-0 select-none overflow-hidden touch-none" />;
 };
+
+export const GameCanvas = React.memo(GameCanvasComponent);

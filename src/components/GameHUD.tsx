@@ -15,6 +15,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { OrientationMode } from './SettingsModal';
+import { soundSynth } from '../game/audio';
 
 interface GameHUDProps {
   hudState: HudState;
@@ -57,7 +58,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   } = hudState;
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 md:p-5 overflow-hidden z-20">
+    <div className="absolute inset-0 pointer-events-none select-none flex flex-col justify-between p-3 md:p-5 overflow-hidden z-20 touch-none">
       {/* Top Header: Position Badge, Global Track Progress, Sound & Settings */}
       <div className="flex flex-col gap-2 w-full max-w-5xl mx-auto">
         <div className="flex items-center justify-between pointer-events-auto">
@@ -100,14 +101,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenSettings}
-              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg"
+              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg pointer-events-auto"
               title="Settings"
             >
               <Settings className="w-5 h-5 text-indigo-400" />
             </button>
             <button
               onClick={onToggleMute}
-              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg"
+              className="p-2.5 bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white rounded-2xl border border-slate-700 backdrop-blur-md transition-all active:scale-95 shadow-lg pointer-events-auto"
               title="Toggle Sound"
             >
               {isMuted ? <VolumeX className="w-5 h-5 text-rose-400" /> : <Volume2 className="w-5 h-5 text-cyan-400" />}
@@ -181,7 +182,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
         {stunTimer > 0 && (
           <div className="flex items-center gap-2 bg-rose-950/90 border border-rose-500 px-5 py-2 rounded-full text-rose-300 font-arcade text-xs md:text-sm tracking-wide shadow-[0_0_25px_rgba(244,63,94,0.7)] animate-bounce">
-            <ShieldAlert className="w-5 h-5 text-rose-400" />
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
             <span>BUMP IMPACT! STAGGERED</span>
           </div>
         )}
@@ -193,14 +194,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         )}
       </div>
 
-      {/* Bottom Controls Bar: Accurate Left/Right Steer | Center Speedometer | Gas & Brake & Nitro */}
-      <div className="flex items-end justify-between gap-2 md:gap-6 w-full max-w-5xl mx-auto">
-        {/* Left Side: Accurate Steer Left & Right Buttons */}
-        <div className="flex gap-2.5 pointer-events-auto">
+      {/* Bottom Controls Bar: Robust Pointer-Captured Non-Sticking Touch Buttons */}
+      <div className="flex items-end justify-between gap-3 md:gap-8 w-full max-w-5xl mx-auto touch-none pointer-events-auto">
+        {/* Left Side: Accurate Non-Sticking Steer Left & Right Buttons */}
+        <div className="flex gap-3">
           {/* Steer Left Button */}
           <button
-            onPointerDown={() => onLaneShift(-1)}
-            className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-900/95 active:bg-cyan-600/60 border-2 border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-100 active:text-cyan-300 transition-transform active:scale-90 shadow-2xl"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onLaneShift(-1);
+            }}
+            className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-900/95 active:bg-cyan-600/70 border-2 border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-100 active:text-cyan-300 transition-transform active:scale-90 shadow-2xl touch-none select-none"
             aria-label="Steer Left"
           >
             <ChevronLeft className="w-9 h-9 stroke-[2.5]" />
@@ -209,8 +213,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           {/* Steer Right Button */}
           <button
-            onPointerDown={() => onLaneShift(1)}
-            className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-900/95 active:bg-cyan-600/60 border-2 border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-100 active:text-cyan-300 transition-transform active:scale-90 shadow-2xl"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onLaneShift(1);
+            }}
+            className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-slate-900/95 active:bg-cyan-600/70 border-2 border-slate-700 active:border-cyan-400 backdrop-blur-md flex flex-col items-center justify-center text-slate-100 active:text-cyan-300 transition-transform active:scale-90 shadow-2xl touch-none select-none"
             aria-label="Steer Right"
           >
             <ChevronRight className="w-9 h-9 stroke-[2.5]" />
@@ -219,7 +226,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
 
         {/* Center: Digital Speedometer & Nitro Tank */}
-        <div className="flex items-center gap-3.5 bg-slate-900/95 backdrop-blur-lg border border-slate-700 rounded-3xl px-4 py-2.5 shadow-2xl pointer-events-auto">
+        <div className="flex items-center gap-3.5 bg-slate-900/95 backdrop-blur-lg border border-slate-700 rounded-3xl px-4 py-2.5 shadow-2xl">
           {/* Speedometer */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] font-bold text-slate-400 tracking-wider">SPEED</span>
@@ -267,14 +274,31 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
 
-        {/* Right Side: Acceleration (Gas), Brake & Nitro Buttons */}
-        <div className="flex items-center gap-2.5 pointer-events-auto">
+        {/* Right Side: Pointer-Captured Gas, Brake & Nitro (Never Gets Stuck) */}
+        <div className="flex items-center gap-3">
           {/* Brake Button */}
           <button
-            onPointerDown={() => onThrottleChange(-1)}
-            onPointerUp={() => onThrottleChange(0)}
-            onPointerLeave={() => onThrottleChange(0)}
-            className={`w-14 h-14 md:w-17 md:h-17 rounded-2xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-90 shadow-2xl ${
+            onPointerDown={(e) => {
+              e.preventDefault();
+              try {
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              } catch {}
+              onThrottleChange(-1);
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              onThrottleChange(1);
+            }}
+            onPointerCancel={(e) => {
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              onThrottleChange(1);
+            }}
+            className={`w-14 h-14 md:w-17 md:h-17 rounded-2xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-90 shadow-2xl touch-none select-none ${
               currentThrottle < 0
                 ? 'bg-rose-600 border-rose-300 text-white shadow-[0_0_18px_#f43f5e]'
                 : 'bg-slate-900/95 hover:bg-slate-800 border-slate-700 text-rose-400'
@@ -287,10 +311,28 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           {/* Acceleration (Gas) Button */}
           <button
-            onPointerDown={() => onThrottleChange(1)}
-            onPointerUp={() => onThrottleChange(0)}
-            onPointerLeave={() => onThrottleChange(0)}
-            className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-90 shadow-2xl ${
+            onPointerDown={(e) => {
+              e.preventDefault();
+              try {
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              } catch {}
+              onThrottleChange(1);
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              // Default to forward cruise
+              onThrottleChange(1);
+            }}
+            onPointerCancel={(e) => {
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              onThrottleChange(1);
+            }}
+            className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl flex flex-col items-center justify-center gap-0.5 border-2 transition-all active:scale-90 shadow-2xl touch-none select-none ${
               currentThrottle > 0
                 ? 'bg-gradient-to-t from-emerald-600 to-teal-500 border-emerald-300 text-white shadow-[0_0_20px_#10b981]'
                 : 'bg-slate-900/95 hover:bg-slate-800 border-slate-700 text-emerald-400'
@@ -303,10 +345,28 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
           {/* Nitro Activation Button */}
           <button
-            onPointerDown={() => onNitroToggle(true)}
-            onPointerUp={() => onNitroToggle(false)}
-            onPointerLeave={() => onNitroToggle(false)}
-            className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl font-arcade font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 shadow-2xl border-2 ${
+            onPointerDown={(e) => {
+              e.preventDefault();
+              try {
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              } catch {}
+              onNitroToggle(true);
+              soundSynth.playNitroBoost();
+            }}
+            onPointerUp={(e) => {
+              e.preventDefault();
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              onNitroToggle(false);
+            }}
+            onPointerCancel={(e) => {
+              try {
+                (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+              } catch {}
+              onNitroToggle(false);
+            }}
+            className={`w-16 h-16 md:w-20 md:h-20 rounded-2xl font-arcade font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-90 shadow-2xl border-2 touch-none select-none ${
               wantsNitro
                 ? 'bg-gradient-to-br from-cyan-400 to-indigo-600 border-white text-white neon-glow-cyan'
                 : nitroPercent > 5

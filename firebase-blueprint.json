@@ -15,6 +15,15 @@
           "description": "User email address",
           "maxLength": 128
         },
+        "fingerprintAuth": {
+          "type": "boolean",
+          "description": "Whether user authenticated via biometric fingerprint"
+        },
+        "biometricKeyId": {
+          "type": "string",
+          "description": "WebAuthn credential ID",
+          "maxLength": 256
+        },
         "coins": {
           "type": "number",
           "description": "Earned game coins"
@@ -42,6 +51,33 @@
         }
       },
       "required": ["displayName", "coins", "activeCarId", "unlockedCars"]
+    },
+    "PlayerHandle": {
+      "title": "Biometric Player Handle",
+      "description": "Mapping of player handle to Firebase UID for passwordless login",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "type": "string",
+          "description": "Normalized player handle",
+          "maxLength": 64
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Formatted player name",
+          "maxLength": 64
+        },
+        "userId": {
+          "type": "string",
+          "description": "Firebase user ID",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Registration timestamp"
+        }
+      },
+      "required": ["handle", "displayName", "userId"]
     },
     "Room": {
       "title": "Multiplayer Race Room",
@@ -160,6 +196,10 @@
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profile with car garage and coin balance"
+    },
+    "/player_handles/{handleId}": {
+      "schema": { "$ref": "#/entities/PlayerHandle" },
+      "description": "Player handle lookup for biometric passwordless login"
     },
     "/rooms/{roomId}": {
       "schema": { "$ref": "#/entities/Room" },

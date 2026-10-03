@@ -19,7 +19,6 @@ import {
   ChevronRight,
   Volume2,
   VolumeX,
-  LogIn,
   LogOut,
   Sliders,
   Settings,
@@ -29,6 +28,7 @@ import {
   Gauge,
   Flame,
   CheckCircle,
+  Fingerprint,
 } from 'lucide-react';
 import { soundSynth } from '../game/audio';
 import { TrackThemeId } from '../game/trackGenerator';
@@ -43,7 +43,7 @@ interface GarageMenuProps {
   onOpenMultiplayer: () => void;
   onOpenAiChief: () => void;
   onOpenSettings: () => void;
-  onSignIn: () => void;
+  onOpenBiometricAuth: () => void;
   onSignOut: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
@@ -61,7 +61,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
   onOpenMultiplayer,
   onOpenAiChief,
   onOpenSettings,
-  onSignIn,
+  onOpenBiometricAuth,
   onSignOut,
   isMuted,
   onToggleMute,
@@ -135,12 +135,14 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
     '#ffffff',
   ];
 
+  const hasBiometric = !!(user && garageData.fingerprintAuth);
+
   return (
     <div className="w-full min-h-screen overflow-y-auto bg-slate-950 text-slate-100 p-4 md:p-8 flex flex-col justify-between gap-8 select-none">
       {/* 1. TOP NAVIGATION HEADER */}
       <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-600 flex items-center justify-center font-arcade font-black text-white text-xl shadow-lg neon-glow-cyan">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-indigo-600 flex items-center justify-center font-arcade font-black text-white text-2xl shadow-lg neon-glow-cyan">
             S
           </div>
           <div>
@@ -153,7 +155,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
           </div>
         </div>
 
-        {/* Currency, Settings & Auth */}
+        {/* Currency, Settings & Biometric Auth */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* Coins Badge */}
           <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-2xl px-4 py-2 shadow-lg">
@@ -182,15 +184,23 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
             <span className="text-xs font-bold hidden sm:inline">Settings</span>
           </button>
 
-          {/* Auth Button */}
-          {user ? (
-            <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-2xl px-3.5 py-1.5 backdrop-blur-md">
-              <span className="text-xs font-semibold text-slate-200 hidden sm:inline">
-                {user.displayName || 'Apex Driver'}
-              </span>
+          {/* Passwordless Biometric Fingerprint Auth */}
+          {hasBiometric ? (
+            <div className="flex items-center gap-2.5 bg-slate-900 border border-cyan-500/60 rounded-2xl px-4 py-1.5 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.25)]">
+              <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                <Fingerprint className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-arcade font-bold text-white leading-tight">
+                  {garageData.displayName || user?.displayName || 'Apex Driver'}
+                </span>
+                <span className="text-[9px] text-cyan-400 font-semibold flex items-center gap-1">
+                  <CheckCircle className="w-2.5 h-2.5 text-emerald-400" /> Fingerprint Verified
+                </span>
+              </div>
               <button
                 onClick={onSignOut}
-                className="p-1 text-slate-400 hover:text-rose-400 transition"
+                className="p-1.5 text-slate-400 hover:text-rose-400 transition ml-1"
                 title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
@@ -198,11 +208,11 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
             </div>
           ) : (
             <button
-              onClick={onSignIn}
-              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/50 rounded-2xl font-semibold text-xs text-white shadow-md transition active:scale-95"
+              onClick={onOpenBiometricAuth}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 border border-cyan-400/60 rounded-2xl font-arcade font-bold text-xs text-white shadow-lg transition active:scale-95 neon-glow-cyan"
             >
-              <LogIn className="w-4 h-4" />
-              <span>Sign In</span>
+              <Fingerprint className="w-4 h-4 animate-pulse text-cyan-300" />
+              <span>FINGERPRINT SIGN IN / REGISTER</span>
             </button>
           )}
         </div>
@@ -218,7 +228,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
                 {currentCar.category}
               </span>
               <span className="text-xs text-slate-400 font-semibold">
-                SOUND: <strong className="text-white uppercase">{currentCar.soundProfile.replace('_', ' ')}</strong>
+                ORIGINAL AUDIO: <strong className="text-white uppercase">{currentCar.soundProfile.replace('_', ' ')}</strong>
               </span>
             </div>
             <h2 className="font-arcade text-2xl md:text-4xl font-black text-white mt-1 text-glow">
@@ -286,7 +296,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
               </div>
               <div>
                 <h3 className="font-arcade text-xl font-black text-amber-300">LOCKED VEHICLE</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Earn coins in races to unlock this powerhouse</p>
+                <p className="text-xs text-slate-400 mt-0.5">Earn coins in races to unlock this hypercar</p>
               </div>
               <button
                 onClick={handleUnlock}
@@ -344,7 +354,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
         </div>
       </section>
 
-      {/* 3. PERFORMANCE TUNING & UPGRADES (Expanded, Scrollable, Professional) */}
+      {/* 3. PERFORMANCE TUNING & UPGRADES */}
       <section className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md flex flex-col gap-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-800">
           <div>
@@ -491,8 +501,8 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
         </div>
       </section>
 
-      {/* 5. BOTTOM COMMAND & ACTION BAR (Never Hidden) */}
-      <footer className="sticky bottom-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 p-4 rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-4 z-40">
+      {/* 5. BOTTOM COMMAND & ACTION BAR (With Distinct Gaps for Offline and Multiplayer) */}
+      <footer className="sticky bottom-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 p-4 md:p-5 rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-6 z-40">
         <div className="flex items-center gap-3">
           {/* AI Crew Chief Advisor Button */}
           <button
@@ -504,14 +514,15 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+        {/* Action Buttons with Generous Gaps */}
+        <div className="flex items-center gap-5 sm:gap-7 w-full sm:w-auto">
           {/* Multiplayer Button */}
           <button
             onClick={onOpenMultiplayer}
             disabled={!isUnlocked}
-            className="flex-1 sm:flex-none py-3.5 px-6 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-arcade font-bold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-xl transition active:scale-95 disabled:opacity-50"
+            className="flex-1 sm:flex-none py-4 px-6 md:px-8 bg-slate-900 hover:bg-slate-800 border-2 border-slate-700 hover:border-indigo-400 text-white font-arcade font-bold text-sm md:text-base rounded-2xl flex items-center justify-center gap-2.5 shadow-xl transition active:scale-95 disabled:opacity-50"
           >
-            <Users className="w-4 h-4 text-indigo-400" />
+            <Users className="w-5 h-5 text-indigo-400" />
             <span>MULTIPLAYER PADDOCK</span>
           </button>
 
@@ -519,10 +530,10 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
           <button
             onClick={() => onStartSoloRace(trackLength, trackTheme)}
             disabled={!isUnlocked}
-            className="flex-1 sm:flex-none py-4 px-8 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-arcade font-black text-base md:text-lg tracking-wider rounded-2xl flex items-center justify-center gap-2 shadow-2xl transition active:scale-95 disabled:opacity-50 neon-glow-cyan"
+            className="flex-1 sm:flex-none py-4 px-8 md:px-10 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-arcade font-black text-base md:text-lg tracking-wider rounded-2xl flex items-center justify-center gap-3 shadow-2xl transition active:scale-95 disabled:opacity-50 neon-glow-cyan"
           >
             <Play className="w-6 h-6 fill-current" />
-            <span>RACE NOW (SOLO BOTS)</span>
+            <span>PLAY SOLO (OFFLINE BOTS)</span>
           </button>
         </div>
       </footer>

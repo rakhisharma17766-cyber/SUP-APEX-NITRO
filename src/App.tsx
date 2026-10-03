@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   auth,
-  googleProvider,
-  signInWithPopup,
   signOut,
   onAuthStateChanged,
   loadUserGarage,
@@ -26,6 +24,7 @@ import { TuningAdvisorModal } from './components/TuningAdvisorModal';
 import { MultiplayerLobbyModal } from './components/MultiplayerLobbyModal';
 import { RaceFinishedModal } from './components/RaceFinishedModal';
 import { SettingsModal, OrientationMode } from './components/SettingsModal';
+import { BiometricAuthModal } from './components/BiometricAuthModal';
 import { soundSynth } from './game/audio';
 
 type GameMode = 'garage' | 'racing' | 'finished';
@@ -56,6 +55,7 @@ export default function App() {
   const [showTuningAdvisor, setShowTuningAdvisor] = useState<boolean>(false);
   const [showMultiplayerLobby, setShowMultiplayerLobby] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [showBiometricModal, setShowBiometricModal] = useState<boolean>(false);
 
   // Orientation Mode: 'auto' | 'landscape' | 'portrait'
   const [orientationMode, setOrientationMode] = useState<OrientationMode>('auto');
@@ -102,12 +102,10 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const handleSignIn = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (e) {
-      console.warn('Google sign-in popup error:', e);
-    }
+  const handleBiometricSuccess = (user: FirebaseUser, garage: UserGarageData) => {
+    setCurrentUser(user);
+    setGarageData(garage);
+    triggerHUDAlert(`WELCOME ${garage.displayName.toUpperCase()}! BIOMETRIC DATA LOADED`);
   };
 
   const handleSignOut = async () => {
@@ -194,7 +192,7 @@ export default function App() {
       const player: RacerEntity = {
         id: currentUser ? currentUser.uid : 'player_local',
         isPlayer: true,
-        name: currentUser?.displayName || 'Apex Driver',
+        name: currentUser?.displayName || garageData.displayName || 'Apex Driver',
         carId,
         color: carDef.primaryColor,
         lane: 1,
@@ -280,7 +278,7 @@ export default function App() {
     initializeRace(length, theme, roomId);
   };
 
-  // Keyboard Controls Listener (Accurate Left & Right)
+  // Keyboard Controls Listener
   useEffect(() => {
     if (gameMode !== 'racing') return;
 
@@ -447,8 +445,6 @@ export default function App() {
   };
 
   // Accurate On-Screen Touch / Button Handlers
-  // direction === -1: Left (targetLane - 1)
-  // direction === 1: Right (targetLane + 1)
   const handleLaneShift = (direction: -1 | 1) => {
     inputRef.current.targetLane = Math.max(0, Math.min(3, inputRef.current.targetLane + direction));
   };
@@ -482,23 +478,23 @@ export default function App() {
           onOpenMultiplayer={() => setShowMultiplayerLobby(true)}
           onOpenAiChief={() => setShowTuningAdvisor(true)}
           onOpenSettings={() => setShowSettings(true)}
-          onSignIn={handleSignIn}
+          onOpenBiometricAuth={() => setShowBiometricModal(true)}
           onSignOut={handleSignOut}
           isMuted={isAudioMuted}
           onToggleMute={handleToggleMute}
         />
       )}
 
-      {/* 2. Active 3D Race View with Orientation Framing */}
+      {/* 2. Active 3D Race View - Locked to Viewport (Zero Scroll Glitches) */}
       {gameMode === 'racing' && trackData && playerEntityRef.current && physicsEngineRef.current && (
-        <div className="w-screen h-screen flex items-center justify-center bg-slate-950 overflow-hidden">
+        <div className="fixed inset-0 z-50 w-screen h-screen flex items-center justify-center bg-slate-950 overflow-hidden touch-none select-none">
           <div
-            className={`relative overflow-hidden transition-all duration-300 ${
+            className={`relative overflow-hidden w-full h-full flex items-center justify-center ${
               orientationMode === 'landscape'
-                ? 'w-full max-w-[177.78vh] aspect-video max-h-screen shadow-2xl rounded-none md:rounded-3xl border border-slate-800'
+                ? 'max-w-[177.78vh] aspect-video max-h-screen shadow-2xl rounded-none md:rounded-3xl border border-slate-800'
                 : orientationMode === 'portrait'
-                ? 'h-full max-h-[177.78vw] aspect-[9/16] max-w-screen shadow-2xl rounded-none md:rounded-3xl border border-slate-800'
-                : 'w-full h-full'
+                ? 'max-h-[177.78vw] aspect-[9/16] max-w-screen shadow-2xl rounded-none md:rounded-3xl border border-slate-800'
+                : ''
             }`}
           >
             <GameCanvas
@@ -569,7 +565,7 @@ export default function App() {
         />
       )}
 
-      {/* Settings Modal (Landscape/Portrait, Audio, Fullscreen) */}
+      {/* Settings Modal */}
       {showSettings && (
         <SettingsModal
           orientationMode={orientationMode}
@@ -577,6 +573,14 @@ export default function App() {
           isMuted={isAudioMuted}
           onToggleMute={handleToggleMute}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Biometric Fingerprint Authentication Modal (Zero Password / Zero OTP) */}
+      {showBiometricModal && (
+        <BiometricAuthModal
+          onSuccess={handleBiometricSuccess}
+          onClose={() => setShowBiometricModal(false)}
         />
       )}
     </div>

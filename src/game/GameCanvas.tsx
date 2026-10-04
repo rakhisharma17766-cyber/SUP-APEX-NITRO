@@ -252,6 +252,8 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
     let lastTime = performance.now();
     let hasAnnouncedFinish = false;
     let hudTimer = 0;
+    let raceElapsedTime = 0;
+    let finishRankCounter = 1;
 
     const animate = (currentTime: number) => {
       animationFrameId = requestAnimationFrame(animate);
@@ -261,6 +263,9 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
 
       if (!isPausedRef.current) {
         const canDrive = countdownRef.current === null;
+        if (canDrive) {
+          raceElapsedTime += delta;
+        }
         const currentInput = inputRef.current;
 
         // A. Update Player Physics
@@ -281,9 +286,17 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
 
         botDrivers.forEach((bot) => {
           if (canDrive) {
-            const { targetLane, wantsNitro } = updateBotAI(bot, track, allRacers, delta);
-            // Bots accelerate with full gas
-            physics.updateRacer(bot.entity, targetLane, 1, wantsNitro, delta);
+            const { targetLane, wantsNitro, throttle } = updateBotAI(bot, track, allRacers, delta);
+            physics.updateRacer(bot.entity, targetLane, throttle, wantsNitro, delta);
+          }
+        });
+
+        // Check Finish Line crossing with exact timestamp and rank for all racers
+        allRacers.forEach((racer) => {
+          if (racer.currentZ >= track.length - 20 && !racer.finished) {
+            racer.finished = true;
+            racer.finishTime = parseFloat(raceElapsedTime.toFixed(2));
+            racer.rank = finishRankCounter++;
           }
         });
 
@@ -315,8 +328,14 @@ const GameCanvasComponent: React.FC<GameCanvasProps> = ({
         // F. Check Race Finish
         if (playerEntity.finished && !hasAnnouncedFinish) {
           hasAnnouncedFinish = true;
-          soundSynth.playVictoryFanfare();
-          onRaceFinishedRef.current();
+          if (playerEntity.rank === 1) {
+            soundSynth.playVictoryFanfare();
+          } else {
+            soundSynth.playBump(0.7);
+          }
+          setTimeout(() => {
+            onRaceFinishedRef.current();
+          }, 1200);
         }
 
         // G. Throttled HUD update (every ~60ms / 16Hz)

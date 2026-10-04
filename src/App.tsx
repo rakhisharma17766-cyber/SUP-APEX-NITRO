@@ -158,13 +158,14 @@ export default function App() {
   };
 
   const handleAwardCoins = (amount: number) => {
+    const isWinner = playerEntityRef.current?.rank === 1;
     const updated: UserGarageData = {
       ...garageData,
       coins: garageData.coins + amount,
       stats: {
         ...garageData.stats,
         racesPlayed: (garageData.stats.racesPlayed || 0) + 1,
-        racesWon: hudState.playerRank === 1 ? (garageData.stats.racesWon || 0) + 1 : garageData.stats.racesWon || 0,
+        racesWon: isWinner ? (garageData.stats.racesWon || 0) + 1 : garageData.stats.racesWon || 0,
         totalBumps: (garageData.stats.totalBumps || 0) + totalBumpsDelivered,
       },
     };

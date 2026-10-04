@@ -321,11 +321,11 @@ export async function registerRacer(name: string, password: string): Promise<Aut
       lastLoginAt: nowIso,
     };
 
-    // Save to Firestore
+    // Save to Firestore (Primary source of truth for all devices across the world)
     try {
       await setDoc(accountRef, newAccount);
     } catch (fsErr) {
-      console.warn('Firestore account save note (local cached):', fsErr);
+      console.warn('Firestore account cloud save notice:', fsErr);
     }
 
     cacheAccountLocally(newAccount);
@@ -340,11 +340,11 @@ export async function registerRacer(name: string, password: string): Promise<Aut
       updatedAt: nowIso,
     };
 
-    // Save garage in Firestore & local
+    // Save garage in Firestore cloud
     try {
       await setDoc(doc(db, 'users', handle), newGarage, { merge: true });
     } catch (gErr) {
-      console.warn('Firestore garage sync note:', gErr);
+      console.warn('Firestore garage cloud sync notice:', gErr);
     }
 
     saveLocalGarage(newGarage, handle);
@@ -374,6 +374,7 @@ export async function registerRacer(name: string, password: string): Promise<Aut
 
 /**
  * Log in to an existing racer account with Name and Password directly from Firebase Firestore
+ * Loads all saved cars, coins, and upgrades onto any new device or phone.
  */
 export async function loginRacer(name: string, password: string): Promise<AuthResponse> {
   const cleanName = name.trim();
@@ -390,18 +391,20 @@ export async function loginRacer(name: string, password: string): Promise<AuthRe
   try {
     let accountData: RacerAccount | null = null;
 
-    // 1. Try to fetch from Firebase Firestore
+    // 1. Fetch account credentials from Firebase Firestore cloud
     try {
       const accountRef = doc(db, 'racer_accounts', handle);
       const snap = await getDoc(accountRef);
       if (snap.exists()) {
         accountData = snap.data() as RacerAccount;
+        // Update local cache on this device
+        cacheAccountLocally(accountData);
       }
     } catch (fsErr) {
-      console.warn('Firestore fetch note, checking local vault:', fsErr);
+      console.warn('Firestore account fetch notice, checking local device cache:', fsErr);
     }
 
-    // 2. Check local vault fallback
+    // 2. Check local vault fallback if offline
     if (!accountData) {
       accountData = getLocalCachedAccount(handle);
     }
@@ -410,7 +413,7 @@ export async function loginRacer(name: string, password: string): Promise<AuthRe
       return {
         success: false,
         session: null,
-        error: `Racer "${cleanName}" not found. Please click "REGISTER" to create a new racer account!`,
+        error: `Racer account "${cleanName}" not found. Please click "NEW RACER" to register your account!`,
       };
     }
 
@@ -424,7 +427,7 @@ export async function loginRacer(name: string, password: string): Promise<AuthRe
       };
     }
 
-    // 4. Update lastLoginAt
+    // 4. Update lastLoginAt in Cloud
     const nowIso = new Date().toISOString();
     try {
       await updateDoc(doc(db, 'racer_accounts', handle), {
@@ -434,15 +437,20 @@ export async function loginRacer(name: string, password: string): Promise<AuthRe
 
     cacheAccountLocally({ ...accountData, lastLoginAt: nowIso });
 
-    // 5. Load saved garage from Firebase Firestore
-    let loadedGarage: UserGarageData = loadLocalGarage(handle);
+    // 5. Load saved garage data directly from Firebase Firestore cloud
+    let loadedGarage: UserGarageData | null = null;
     try {
       const userDocSnap = await getDoc(doc(db, 'users', handle));
       if (userDocSnap.exists()) {
         loadedGarage = userDocSnap.data() as UserGarageData;
       }
     } catch (gErr) {
-      console.warn('Firestore garage load note, using local cache:', gErr);
+      console.warn('Firestore garage load notice:', gErr);
+    }
+
+    // If cloud has garage, use it. Otherwise fallback to local or default.
+    if (!loadedGarage) {
+      loadedGarage = loadLocalGarage(handle);
     }
 
     loadedGarage = {
@@ -451,6 +459,7 @@ export async function loginRacer(name: string, password: string): Promise<AuthRe
       username: handle,
     };
 
+    // Save newly downloaded cloud profile into this phone/browser's local storage
     saveLocalGarage(loadedGarage, handle);
 
     const session: ActiveRacerSession = {

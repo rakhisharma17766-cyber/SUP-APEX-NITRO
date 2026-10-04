@@ -27,7 +27,10 @@ export const RaceFinishedModal: React.FC<RaceFinishedModalProps> = ({
 
   // Sort by finish rank
   const podium = [...racers].sort((a, b) => {
-    if (a.finished && b.finished) return a.finishTime - b.finishTime;
+    if (a.finished && b.finished) {
+      if (a.rank && b.rank && a.rank !== b.rank) return a.rank - b.rank;
+      return a.finishTime - b.finishTime;
+    }
     if (a.finished) return -1;
     if (b.finished) return 1;
     return b.currentZ - a.currentZ;
@@ -36,16 +39,16 @@ export const RaceFinishedModal: React.FC<RaceFinishedModalProps> = ({
   const playerRank = podium.findIndex((r) => r.id === player.id) + 1;
 
   // Calculate Coin rewards
-  const rankRewards = [500, 300, 180, 100];
-  const rankCoins = rankRewards[playerRank - 1] || 100;
+  const rankRewards = [500, 300, 180, 80];
+  const rankCoins = rankRewards[playerRank - 1] || 80;
   const bumpBonus = totalBumps * 25;
   const totalCoinsEarned = rankCoins + bumpBonus;
 
   useEffect(() => {
-    // Trigger confetti for podium finishers
+    // Trigger confetti only for podium finishers (1st, 2nd, 3rd)
     if (playerRank <= 3) {
       confetti({
-        particleCount: playerRank === 1 ? 120 : 60,
+        particleCount: playerRank === 1 ? 120 : playerRank === 2 ? 60 : 35,
         spread: 80,
         origin: { y: 0.6 },
         colors: ['#06b6d4', '#f59e0b', '#ec4899', '#ffffff'],
@@ -87,21 +90,21 @@ export const RaceFinishedModal: React.FC<RaceFinishedModalProps> = ({
                   ? 'text-slate-300'
                   : playerRank === 3
                   ? 'text-amber-700'
-                  : 'text-slate-500'
+                  : 'text-rose-500'
               }`}
             />
-            <h2 className="font-arcade text-3xl md:text-5xl font-black tracking-wider text-glow">
+            <h2 className="font-arcade text-2xl sm:text-4xl md:text-5xl font-black tracking-wider text-glow">
               {playerRank === 1
-                ? 'VICTORY!'
+                ? 'VICTORY! 1ST PLACE'
                 : playerRank === 2
                 ? '2ND PLACE'
                 : playerRank === 3
                 ? '3RD PLACE'
-                : 'FINISH!'}
+                : '4TH PLACE - DEFEATED'}
             </h2>
           </div>
           <p className="text-sm font-semibold text-slate-400">
-            Official Clock Time: {player.finishTime ? `${player.finishTime.toFixed(2)}s` : '32.18s'}
+            {player.finishTime ? `Official Clock Time: ${player.finishTime.toFixed(2)}s` : 'Race Complete'}
           </p>
         </div>
 

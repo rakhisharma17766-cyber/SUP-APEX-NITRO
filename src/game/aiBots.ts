@@ -18,6 +18,8 @@ export function createBotRacers(track: TrackData): BotDriver[] {
       lane: 0,
       personality: 'speedster' as const,
       zOffset: -2,
+      baseSpeed: 50.5,
+      accel: 28,
     },
     {
       id: 'bot_bravo',
@@ -27,6 +29,8 @@ export function createBotRacers(track: TrackData): BotDriver[] {
       lane: 2,
       personality: 'aggressive' as const,
       zOffset: -5,
+      baseSpeed: 48.5,
+      accel: 26,
     },
     {
       id: 'bot_charlie',
@@ -36,11 +40,12 @@ export function createBotRacers(track: TrackData): BotDriver[] {
       lane: 3,
       personality: 'tactical' as const,
       zOffset: -8,
+      baseSpeed: 49.5,
+      accel: 27,
     },
   ];
 
   return botsConfig.map((cfg) => {
-    // Generate base physics stats for bot
     const entity: RacerEntity = {
       id: cfg.id,
       isPlayer: false,
@@ -68,15 +73,15 @@ export function createBotRacers(track: TrackData): BotDriver[] {
       finishTime: 0,
       rank: 4,
       stats: {
-        maxSpeedUnitsPerSec: 58 + Math.random() * 6,
-        maxSpeedKmh: 175 + Math.floor(Math.random() * 15),
-        accelerationRate: 35 + Math.random() * 5,
+        maxSpeedUnitsPerSec: cfg.baseSpeed + Math.random() * 2.0,
+        maxSpeedKmh: 155 + Math.floor(Math.random() * 10),
+        accelerationRate: cfg.accel + Math.random() * 3,
         dragCoefficient: 0.985,
-        armorWeight: cfg.personality === 'aggressive' ? 2.2 : 1.4,
-        bumpKnockbackPower: cfg.personality === 'aggressive' ? 9.0 : 6.5,
-        nitroDurationSeconds: 3.5,
-        nitroSpeedMultiplier: 1.38,
-        nitroRefillRate: 0.18,
+        armorWeight: cfg.personality === 'aggressive' ? 2.0 : 1.3,
+        bumpKnockbackPower: cfg.personality === 'aggressive' ? 7.5 : 5.5,
+        nitroDurationSeconds: 3.0,
+        nitroSpeedMultiplier: 1.28,
+        nitroRefillRate: 0.12,
       },
     };
 
@@ -84,7 +89,7 @@ export function createBotRacers(track: TrackData): BotDriver[] {
       entity,
       personality: cfg.personality,
       decisionTimer: Math.random() * 0.5,
-      nitroCooldown: 2.0 + Math.random() * 3.0,
+      nitroCooldown: 3.0 + Math.random() * 3.0,
     };
   });
 }
@@ -94,15 +99,40 @@ export function updateBotAI(
   track: TrackData,
   allRacers: RacerEntity[],
   delta: number
-): { targetLane: number; wantsNitro: boolean } {
+): { targetLane: number; wantsNitro: boolean; throttle: number } {
   bot.decisionTimer -= delta;
   bot.nitroCooldown -= delta;
 
   const currentZ = bot.entity.currentZ;
   let targetLane = bot.entity.lane;
   let wantsNitro = false;
+  let throttle = 1.0;
 
-  // Evaluate decisions every 0.25 - 0.45s to simulate reaction time
+  // Find player entity to perform balanced arcade rubber-banding
+  const player = allRacers.find((r) => r.isPlayer);
+  if (player) {
+    const leadDistance = currentZ - player.currentZ;
+
+    // Intelligent Rubber-Banding:
+    // If bot is far ahead, ease off throttle so player can draft and challenge
+    if (leadDistance > 35) {
+      throttle = 0.74; // gentle coast
+    } else if (leadDistance > 20) {
+      throttle = 0.84; // competitive pace
+    } else if (leadDistance < -15) {
+      // Bot is falling behind: catch up!
+      throttle = 1.0;
+      if (bot.nitroCooldown <= 0 && bot.entity.nitroFuel > 0.3) {
+        wantsNitro = true;
+        bot.nitroCooldown = 4.0 + Math.random() * 2.0;
+      }
+    } else {
+      // Close quarter racing: intense bumper duel
+      throttle = 0.96;
+    }
+  }
+
+  // Tactical lane choices every 0.25 - 0.45s
   if (bot.decisionTimer <= 0) {
     bot.decisionTimer = 0.28 + Math.random() * 0.18;
 
@@ -116,7 +146,6 @@ export function updateBotAI(
     );
 
     if (obstacleAhead) {
-      // Steer to safer adjacent lane
       if (bot.entity.lane === 0) targetLane = 1;
       else if (bot.entity.lane === 3) targetLane = 2;
       else targetLane = Math.random() > 0.5 ? bot.entity.lane + 1 : bot.entity.lane - 1;
@@ -130,7 +159,7 @@ export function updateBotAI(
           Math.abs(f.lane - bot.entity.lane) === 1
       );
 
-      if (boostAhead && Math.random() < 0.75) {
+      if (boostAhead && Math.random() < 0.7) {
         targetLane = boostAhead.lane;
       } else if (bot.personality === 'aggressive') {
         // Find closest rival ahead to bump
@@ -138,7 +167,7 @@ export function updateBotAI(
           (r) =>
             r.id !== bot.entity.id &&
             r.currentZ > currentZ &&
-            r.currentZ - currentZ < 20 &&
+            r.currentZ - currentZ < 18 &&
             Math.abs(r.lane - bot.entity.lane) <= 1
         );
         if (rivalAhead && Math.random() < 0.6) {
@@ -147,15 +176,14 @@ export function updateBotAI(
       }
     }
 
-    // 3. Strategic Nitro usage
-    if (bot.nitroCooldown <= 0 && bot.entity.nitroFuel > 0.4) {
-      // Trigger nitro on ramps, straightaways, or when trailing behind
-      const isTrailing = allRacers.some(
-        (r) => r.id !== bot.entity.id && r.currentZ > currentZ + 15
+    // 3. Strategic Nitro on ramps or straightaways
+    if (!wantsNitro && bot.nitroCooldown <= 0 && bot.entity.nitroFuel > 0.45) {
+      const nearRamp = track.features.some(
+        (f) => f.type === 'ramp' && Math.abs(f.z - currentZ) < 25 && f.lane === bot.entity.lane
       );
-      if (isTrailing || Math.random() < 0.5) {
+      if (nearRamp || Math.random() < 0.35) {
         wantsNitro = true;
-        bot.nitroCooldown = 4.0 + Math.random() * 3.0;
+        bot.nitroCooldown = 5.0 + Math.random() * 3.0;
       }
     }
   }
@@ -165,5 +193,5 @@ export function updateBotAI(
     wantsNitro = true;
   }
 
-  return { targetLane, wantsNitro };
+  return { targetLane, wantsNitro, throttle };
 }

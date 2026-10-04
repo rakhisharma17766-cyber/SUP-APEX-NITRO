@@ -139,7 +139,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
   }, [currentCar.primaryColor]);
 
   return (
-    <div className="w-full min-h-[100dvh] bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-8 flex flex-col justify-between gap-6 md:gap-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
+    <div className="w-full min-h-[100dvh] bg-slate-950 text-slate-100 p-3 sm:p-5 md:p-6 flex flex-col justify-between gap-4 md:gap-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))]">
       {/* 1. TOP NAVIGATION HEADER */}
       <header className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -429,47 +429,46 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
       </section>
 
       {/* 3. TRACK & RACE CONFIGURATION */}
-      <section className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md flex flex-col gap-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+      <section className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xl backdrop-blur-md flex flex-col gap-3">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
           <span className="text-xs font-arcade font-bold text-cyan-400 uppercase tracking-wider">
             Grand Prix Circuit Parameters
           </span>
-          <span className="text-xs text-slate-400">
+          <span className="text-[11px] text-slate-400">
             Procedural 3D Track Layout with Dynamic Splines
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Track Distance */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             <span className="text-xs font-bold text-slate-300">CIRCUIT DISTANCE:</span>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {[
-                { len: 1000, label: '1,000m', badge: 'Sprint Heat', desc: 'Fast furious 30s dash' },
-                { len: 2500, label: '2,500m', badge: 'Standard GP', desc: 'Balanced tactical circuit' },
-                { len: 5000, label: '5,000m', badge: 'Endurance', desc: 'Epic long distance test' },
+                { len: 1000, label: '1,000m', badge: 'Sprint Heat' },
+                { len: 2500, label: '2,500m', badge: 'Standard GP' },
+                { len: 5000, label: '5,000m', badge: 'Endurance' },
               ].map((opt) => (
                 <button
                   key={opt.len}
                   onClick={() => setTrackLength(opt.len)}
-                  className={`p-3.5 rounded-2xl border text-center transition ${
+                  className={`p-2.5 rounded-xl border text-center transition ${
                     trackLength === opt.len
-                      ? 'bg-cyan-950/90 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+                      ? 'bg-cyan-950/90 border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                       : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:bg-slate-900'
                   }`}
                 >
-                  <span className="font-arcade text-base font-black block">{opt.label}</span>
-                  <span className="text-xs font-semibold text-slate-200 block mt-0.5">{opt.badge}</span>
-                  <span className="text-[10px] text-slate-500 mt-1 block">{opt.desc}</span>
+                  <span className="font-arcade text-sm font-black block">{opt.label}</span>
+                  <span className="text-[10px] font-semibold text-slate-300 block mt-0.5">{opt.badge}</span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Track Theme */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             <span className="text-xs font-bold text-slate-300">VISUAL ENVIRONMENT:</span>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'cyber' as const, name: 'Neon Cyber', tag: 'Skyline' },
                 { id: 'desert' as const, name: 'Desert Canyon', tag: 'Red Rock' },
@@ -478,13 +477,13 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
                 <button
                   key={t.id}
                   onClick={() => setTrackTheme(t.id)}
-                  className={`p-3.5 rounded-2xl border text-center transition ${
+                  className={`p-2.5 rounded-xl border text-center transition ${
                     trackTheme === t.id
-                      ? 'bg-cyan-950/90 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+                      ? 'bg-cyan-950/90 border-cyan-400 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
                       : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:bg-slate-900'
                   }`}
                 >
-                  <span className="font-arcade text-sm font-bold block">{t.name}</span>
+                  <span className="font-arcade text-xs font-bold block">{t.name}</span>
                   <span className="text-[10px] text-slate-400 mt-0.5 block">{t.tag}</span>
                 </button>
               ))}
@@ -493,39 +492,41 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
         </div>
       </section>
 
-      {/* 4. BOTTOM COMMAND & ACTION BAR (With Distinct Gaps for Offline and Multiplayer) */}
-      <footer className="sticky bottom-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 p-4 md:p-5 rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-6 z-40">
-        <div className="flex items-center gap-3">
+      {/* 4. BOTTOM COMMAND & ACTION BAR (Streamlined, Pro-Arcade, Zero Overflow) */}
+      <footer className="sticky bottom-0 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/90 py-2.5 px-3 sm:px-5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 z-40 mt-2">
+        <div className="flex items-center gap-2">
           {/* AI Crew Chief Advisor Button */}
           <button
             onClick={onOpenAiChief}
-            className="py-3 px-5 bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 border border-indigo-500/50 rounded-2xl text-xs font-arcade font-bold text-indigo-300 flex items-center gap-2 shadow-lg transition active:scale-95"
+            className="py-2 px-3 sm:py-2.5 sm:px-4 bg-gradient-to-r from-indigo-950 to-purple-950 hover:from-indigo-900 hover:to-purple-900 border border-indigo-500/40 rounded-xl text-[11px] sm:text-xs font-arcade font-bold text-indigo-300 flex items-center gap-2 shadow-md transition active:scale-95"
+            title="AI Strategy Advisor"
           >
-            <BrainCircuit className="w-4 h-4 text-indigo-400 animate-pulse" />
-            <span>APEX AI CHIEF STRATEGY</span>
+            <BrainCircuit className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+            <span className="hidden sm:inline">AI STRATEGY</span>
+            <span className="sm:hidden">AI CHIEF</span>
           </button>
         </div>
 
-        {/* Action Buttons with Generous Gaps */}
-        <div className="flex items-center gap-5 sm:gap-7 w-full sm:w-auto">
+        {/* Action Buttons - Clean, Proportioned, No Overlap */}
+        <div className="flex items-center gap-2.5 sm:gap-4 justify-end">
           {/* Multiplayer Button */}
           <button
             onClick={onOpenMultiplayer}
             disabled={!isUnlocked}
-            className="flex-1 sm:flex-none py-4 px-6 md:px-8 bg-slate-900 hover:bg-slate-800 border-2 border-slate-700 hover:border-indigo-400 text-white font-arcade font-bold text-sm md:text-base rounded-2xl flex items-center justify-center gap-2.5 shadow-xl transition active:scale-95 disabled:opacity-50"
+            className="py-2.5 px-3.5 sm:px-5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-indigo-400 text-white font-arcade font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg transition active:scale-95 disabled:opacity-50"
           >
-            <Users className="w-5 h-5 text-indigo-400" />
-            <span>MULTIPLAYER PADDOCK</span>
+            <Users className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+            <span>MULTIPLAYER</span>
           </button>
 
           {/* Play Solo Primary Action Button */}
           <button
             onClick={() => onStartSoloRace(trackLength, trackTheme)}
             disabled={!isUnlocked}
-            className="flex-1 sm:flex-none py-4 px-8 md:px-10 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-arcade font-black text-base md:text-lg tracking-wider rounded-2xl flex items-center justify-center gap-3 shadow-2xl transition active:scale-95 disabled:opacity-50 neon-glow-cyan"
+            className="py-2.5 px-4 sm:py-2.5 sm:px-7 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-arcade font-black text-xs sm:text-sm tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-xl transition active:scale-95 disabled:opacity-50 neon-glow-cyan"
           >
-            <Play className="w-6 h-6 fill-current" />
-            <span>PLAY SOLO (OFFLINE BOTS)</span>
+            <Play className="w-4 h-4 fill-current flex-shrink-0" />
+            <span>RACE SOLO (BOTS)</span>
           </button>
         </div>
       </footer>

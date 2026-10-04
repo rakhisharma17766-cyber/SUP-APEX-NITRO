@@ -384,6 +384,33 @@ class SoundSynthesizer {
     }
   }
 
+  public playRampJump() {
+    this.playJump();
+  }
+
+  // Quick whoosh for tactical lane switch
+  public playLaneSwitch() {
+    if (this.isMuted) return;
+    this.initContext();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320, now);
+      osc.frequency.exponentialRampToValueAtTime(520, now + 0.08);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.1);
+    } catch {
+      // Ignored
+    }
+  }
+
   // Slipstream Draft Indicator Audio
   public playSlipstreamHum(active: boolean) {
     if (this.isMuted || !this.ctx) return;

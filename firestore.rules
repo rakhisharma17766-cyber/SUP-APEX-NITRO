@@ -6,41 +6,37 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // User Profile & Garage
-    match /users/{userId} {
-      allow get: if isSignedIn() && request.auth.uid == userId;
-      allow create, update: if isSignedIn() && request.auth.uid == userId && isValidId(userId);
+    // Custom Racer Accounts (Register & Sign In)
+    match /racer_accounts/{accountId} {
+      allow get: if isValidId(accountId);
+      allow create: if isValidId(accountId) && request.resource.data.username == accountId;
+      allow update: if isValidId(accountId);
       allow delete: if false;
     }
 
-    // Biometric Player Handle Lookup (Passwordless Fingerprint Auth)
-    match /player_handles/{handleId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(handleId) && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(handleId) && resource.data.userId == request.auth.uid;
+    // User Profile & Garage Data (Custom Authentication Persistence)
+    match /users/{userId} {
+      allow get: if isValidId(userId);
+      allow create, update: if isValidId(userId);
       allow delete: if false;
     }
 
     // Multiplayer Race Rooms
     match /rooms/{roomId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && isValidId(roomId) && request.resource.data.hostId == request.auth.uid;
-      allow update: if isSignedIn() && isValidId(roomId);
-      allow delete: if isSignedIn() && resource.data.hostId == request.auth.uid;
+      allow get, list: if isValidId(roomId);
+      allow create: if isValidId(roomId);
+      allow update: if isValidId(roomId);
+      allow delete: if isValidId(roomId);
 
       // Realtime Players in Room
       match /players/{playerId} {
-        allow get, list: if isSignedIn();
-        allow create, update: if isSignedIn() && isValidId(playerId);
-        allow delete: if isSignedIn() && (request.auth.uid == playerId || request.auth.uid == get(/databases/$(database)/documents/rooms/$(roomId)).data.hostId);
+        allow get, list: if isValidId(playerId);
+        allow create, update: if isValidId(playerId);
+        allow delete: if isValidId(playerId);
       }
     }
   }

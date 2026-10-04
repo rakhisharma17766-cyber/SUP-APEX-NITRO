@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { User as FirebaseUser } from 'firebase/auth';
+import React, { useState, useMemo } from 'react';
 import {
   VEHICLES,
   UPGRADES_META,
@@ -7,7 +6,7 @@ import {
   getUpgradeCost,
   computePhysicsStats,
 } from '../game/cars';
-import { UserGarageData } from '../services/firebase';
+import { UserGarageData, ActiveRacerSession } from '../services/firebase';
 import { GarageStage } from './GarageStage';
 import {
   Coins,
@@ -28,13 +27,13 @@ import {
   Gauge,
   Flame,
   CheckCircle,
-  Fingerprint,
+  User,
 } from 'lucide-react';
 import { soundSynth } from '../game/audio';
 import { TrackThemeId } from '../game/trackGenerator';
 
 interface GarageMenuProps {
-  user: FirebaseUser | null;
+  session: ActiveRacerSession | null;
   garageData: UserGarageData;
   onSelectCar: (carId: string) => void;
   onUnlockCar: (carId: string, price: number) => void;
@@ -43,7 +42,7 @@ interface GarageMenuProps {
   onOpenMultiplayer: () => void;
   onOpenAiChief: () => void;
   onOpenSettings: () => void;
-  onOpenBiometricAuth: () => void;
+  onOpenAuthModal: () => void;
   onSignOut: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
@@ -52,7 +51,7 @@ interface GarageMenuProps {
 const CAR_KEYS = Object.keys(VEHICLES);
 
 export const GarageMenu: React.FC<GarageMenuProps> = ({
-  user,
+  session,
   garageData,
   onSelectCar,
   onUnlockCar,
@@ -61,7 +60,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
   onOpenMultiplayer,
   onOpenAiChief,
   onOpenSettings,
-  onOpenBiometricAuth,
+  onOpenAuthModal,
   onSignOut,
   isMuted,
   onToggleMute,
@@ -122,20 +121,22 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
     onUnlockCar(activeCarId, currentCar.unlockPrice);
   };
 
-  const paintOptions = [
-    currentCar.primaryColor,
-    '#ef4444',
-    '#06b6d4',
-    '#eab308',
-    '#a855f7',
-    '#10b981',
-    '#f43f5e',
-    '#f97316',
-    '#3b82f6',
-    '#ffffff',
-  ];
-
-  const hasBiometric = !!(user && garageData.fingerprintAuth);
+  const paintOptions = useMemo(() => {
+    return Array.from(
+      new Set([
+        currentCar.primaryColor,
+        '#ef4444',
+        '#06b6d4',
+        '#eab308',
+        '#a855f7',
+        '#10b981',
+        '#f43f5e',
+        '#f97316',
+        '#3b82f6',
+        '#ffffff',
+      ])
+    );
+  }, [currentCar.primaryColor]);
 
   return (
     <div className="w-full min-h-[100dvh] bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-8 flex flex-col justify-between gap-6 md:gap-8 pb-[max(2rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
@@ -155,7 +156,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
           </div>
         </div>
 
-        {/* Currency, Settings & Biometric Auth */}
+        {/* Currency, Settings & Google Auth */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* Coins Badge */}
           <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md border border-amber-500/50 rounded-2xl px-4 py-2 shadow-lg">
@@ -184,35 +185,41 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
             <span className="text-xs font-bold hidden sm:inline">Settings</span>
           </button>
 
-          {/* Passwordless Biometric Fingerprint Auth */}
-          {hasBiometric ? (
-            <div className="flex items-center gap-2.5 bg-slate-900 border border-cyan-500/60 rounded-2xl px-4 py-1.5 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.25)]">
-              <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
-                <Fingerprint className="w-4 h-4" />
+          {/* CUSTOM RACER CLOUD AUTHENTICATION SECTION */}
+          {session ? (
+            <div className="flex items-center gap-3 bg-slate-900/95 border border-cyan-500/50 rounded-2xl px-3.5 py-1.5 backdrop-blur-md shadow-[0_0_15px_rgba(6,182,212,0.25)]">
+              {/* User Avatar */}
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-indigo-600 flex items-center justify-center font-arcade font-black text-white text-xs shadow-sm">
+                {session.displayName.charAt(0).toUpperCase()}
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs font-arcade font-bold text-white leading-tight">
-                  {garageData.displayName || user?.displayName || 'Apex Driver'}
+
+              {/* Profile Details */}
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-arcade font-bold text-white max-w-[130px] truncate leading-tight">
+                  {session.displayName}
                 </span>
-                <span className="text-[9px] text-cyan-400 font-semibold flex items-center gap-1">
-                  <CheckCircle className="w-2.5 h-2.5 text-emerald-400" /> Fingerprint Verified
+                <span className="text-[10px] text-cyan-400 font-semibold flex items-center gap-1">
+                  <CheckCircle className="w-2.5 h-2.5 text-emerald-400" /> Cloud Synced
                 </span>
               </div>
+
+              {/* Sign Out Button */}
               <button
                 onClick={onSignOut}
-                className="p-1.5 text-slate-400 hover:text-rose-400 transition ml-1"
-                title="Sign Out"
+                className="p-1.5 text-slate-400 hover:text-rose-400 transition ml-1 rounded-lg hover:bg-slate-800"
+                title="Log Out of Racer Account"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <button
-              onClick={onOpenBiometricAuth}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 border border-cyan-400/60 rounded-2xl font-arcade font-bold text-xs text-white shadow-lg transition active:scale-95 neon-glow-cyan"
+              onClick={onOpenAuthModal}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-arcade font-bold text-xs rounded-2xl shadow-lg transition active:scale-95 neon-glow-cyan"
+              title="Log In or Register Custom Racer Profile"
             >
-              <Fingerprint className="w-4 h-4 animate-pulse text-cyan-300" />
-              <span>FINGERPRINT SIGN IN / REGISTER</span>
+              <User className="w-4 h-4 text-cyan-200" />
+              <span>RACER LOGIN / REGISTER</span>
             </button>
           )}
         </div>
@@ -260,7 +267,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
                       : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-900'
                   }`}
                 >
-                  {!unlocked && <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                  {!unlocked && <Lock className="w-3 h-3 text-amber-400" />}
                   <span>{car.name}</span>
                 </button>
               );
@@ -268,185 +275,168 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
           </div>
         </div>
 
-        {/* 3D Turntable Stage with Carousel Controls */}
-        <div className="relative w-full h-80 md:h-96 bg-slate-950/80 rounded-3xl border border-slate-800/80 overflow-hidden flex items-center justify-center shadow-inner">
-          <div className="w-full h-full pointer-events-none">
-            <GarageStage carId={activeCarId} customColor={selectedColor} />
-          </div>
-
-          {/* Left / Right Carousel Buttons */}
-          <button
-            onClick={handlePrevCar}
-            className="absolute left-4 top-1/2 -translate-y-1/2 p-3.5 bg-slate-900/85 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-2xl backdrop-blur-md transition active:scale-90 shadow-xl z-20"
-            aria-label="Previous Car"
-          >
-            <ChevronLeft className="w-7 h-7" />
-          </button>
-          <button
-            onClick={handleNextCar}
-            className="absolute right-4 top-1/2 -translate-y-1/2 p-3.5 bg-slate-900/85 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-2xl backdrop-blur-md transition active:scale-90 shadow-xl z-20"
-            aria-label="Next Car"
-          >
-            <ChevronRight className="w-7 h-7" />
-          </button>
-
-          {/* Lock Overlay if Locked */}
-          {!isUnlocked && (
-            <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-xs flex flex-col items-center justify-center gap-3 rounded-3xl p-6 text-center z-30">
-              <div className="p-4 bg-slate-900 border border-amber-500/60 rounded-3xl text-amber-400 shadow-2xl">
-                <Lock className="w-8 h-8" />
-              </div>
-              <div>
-                <h3 className="font-arcade text-xl font-black text-amber-300">LOCKED VEHICLE</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Earn coins in races to unlock this hypercar</p>
-              </div>
-              <button
-                onClick={handleUnlock}
-                className="mt-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 text-slate-950 font-arcade font-black text-sm rounded-2xl shadow-xl transition active:scale-95 flex items-center gap-2 neon-glow-amber"
-              >
-                <Coins className="w-5 h-5" />
-                <span>UNLOCK FOR {currentCar.unlockPrice} COINS</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Paint Swatches & Real Specifications Row */}
+        {/* 3D Showcase & Tuning Workspace */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-          {/* Paint Swatches */}
-          <div className="lg:col-span-4 flex flex-col gap-2 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
-            <span className="text-xs font-bold text-slate-300">CUSTOM LIVERY COAT:</span>
-            <div className="flex gap-2 flex-wrap">
-              {paintOptions.map((hex, i) => (
+          {/* 3D Interactive Turntable */}
+          <div className="lg:col-span-7 h-72 sm:h-80 md:h-96 relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950/80 shadow-inner group">
+            <GarageStage
+              carId={activeCarId}
+              customColor={selectedColor}
+            />
+
+            {/* Left / Right Carousel Controls */}
+            <button
+              onClick={handlePrevCar}
+              className="absolute left-3 top-1/2 -translate-y-1/2 p-3 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-white backdrop-blur-md transition active:scale-90 shadow-lg"
+              title="Previous Car"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <button
+              onClick={handleNextCar}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-3 rounded-full bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-white backdrop-blur-md transition active:scale-90 shadow-lg"
+              title="Next Car"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+
+            {/* Custom Paint Color Swatches */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-slate-700 shadow-md">
+              <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase">Paint:</span>
+              {paintOptions.map((c, idx) => (
                 <button
-                  key={i}
-                  onClick={() => setSelectedColor(hex)}
-                  className={`w-7 h-7 rounded-xl border-2 transition active:scale-90 shadow-sm ${
-                    selectedColor === hex ? 'border-white scale-110 shadow-cyan-500/50' : 'border-slate-700'
+                  key={`paint-swatch-${c}-${idx}`}
+                  onClick={() => {
+                    setSelectedColor(c);
+                    soundSynth.playBoostPad();
+                  }}
+                  className={`w-5 h-5 rounded-full border-2 transition active:scale-90 ${
+                    selectedColor === c ? 'border-white scale-110 shadow-md' : 'border-transparent'
                   }`}
-                  style={{ backgroundColor: hex }}
+                  style={{ backgroundColor: c }}
+                  title={c}
                 />
               ))}
             </div>
           </div>
 
-          {/* Physics Stats Cards */}
-          <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
-              <Gauge className="w-5 h-5 text-cyan-400 mb-1" />
-              <span className="text-[10px] text-slate-400 font-bold">TOP SPEED</span>
-              <span className="font-arcade text-lg md:text-xl font-black text-white">{physicsStats.maxSpeedKmh} KM/H</span>
+          {/* Vehicle Stats, Specs, & Upgrade Tuning Matrix */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span className="text-xs font-arcade font-bold text-cyan-400 uppercase tracking-wider">
+                Telemetry & Tuning Matrix
+              </span>
+              <span className="text-xs text-slate-400 font-semibold">
+                Tier Levels: 1 - 5
+              </span>
             </div>
-            <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
-              <Shield className="w-5 h-5 text-indigo-400 mb-1" />
-              <span className="text-[10px] text-slate-400 font-bold">BUMP MASS</span>
-              <span className="font-arcade text-lg md:text-xl font-black text-white">{physicsStats.armorWeight.toFixed(1)}x</span>
-            </div>
-            <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
-              <Flame className="w-5 h-5 text-amber-400 mb-1" />
-              <span className="text-[10px] text-slate-400 font-bold">NITRO BOOST</span>
-              <span className="font-arcade text-lg md:text-xl font-black text-amber-300">+{Math.round((physicsStats.nitroSpeedMultiplier - 1) * 100)}%</span>
-            </div>
-            <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
-              <Zap className="w-5 h-5 text-emerald-400 mb-1" />
-              <span className="text-[10px] text-slate-400 font-bold">BURN TIME</span>
-              <span className="font-arcade text-lg md:text-xl font-black text-emerald-300">{physicsStats.nitroDurationSeconds.toFixed(1)}s</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* 3. PERFORMANCE TUNING & UPGRADES */}
-      <section className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md flex flex-col gap-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <div>
-            <h3 className="font-arcade text-lg md:text-xl font-black text-cyan-400 text-glow flex items-center gap-2">
-              <Sliders className="w-5 h-5 text-cyan-400" />
-              <span>PERFORMANCE TUNING UPGRADES</span>
-            </h3>
-            <p className="text-xs text-slate-400">Upgrade parts to increase top speed, acceleration, and ramming power</p>
-          </div>
-          <span className="text-xs font-bold text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-            MAX LEVEL 5
-          </span>
-        </div>
+            {/* 5 Upgradable Real-Time Physics Stats */}
+            <div className="space-y-3">
+              {UPGRADES_META.map((meta) => {
+                const key = meta.key;
+                const currentLevel = carUpgrades[key] || 1;
+                const cost = getUpgradeCost(currentLevel);
+                const isMax = currentLevel >= 5;
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {UPGRADES_META.map((meta) => {
-            const currentLvl = carUpgrades[meta.key] || 1;
-            const isMax = currentLvl >= 5;
-            const cost = getUpgradeCost(currentLvl);
-            const canAfford = garageData.coins >= cost;
+                return (
+                  <div
+                    key={key}
+                    className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between gap-3 shadow-md"
+                  >
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-cyan-400 flex-shrink-0">
+                        {key === 'topSpeed' && <Gauge className="w-4 h-4" />}
+                        {key === 'acceleration' && <Zap className="w-4 h-4" />}
+                        {key === 'heavyArmor' && <Shield className="w-4 h-4" />}
+                        {key === 'nitroDuration' && <Flame className="w-4 h-4" />}
+                        {key === 'nitroPower' && <Sparkles className="w-4 h-4 text-amber-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-arcade font-bold text-white truncate">
+                            {meta.name}
+                          </span>
+                          <span className="text-[10px] text-cyan-400 font-bold ml-2">
+                            LVL {currentLevel}/5
+                          </span>
+                        </div>
+                        {/* 5 Pips Progress Bar */}
+                        <div className="flex gap-1 mt-1">
+                          {[1, 2, 3, 4, 5].map((lvl) => (
+                            <div
+                              key={lvl}
+                              className={`h-1.5 flex-1 rounded-full ${
+                                lvl <= currentLevel
+                                  ? 'bg-gradient-to-r from-cyan-400 to-indigo-500 shadow-[0_0_6px_rgba(6,182,212,0.6)]'
+                                  : 'bg-slate-800'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
 
-            return (
-              <div
-                key={meta.key}
-                className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-md hover:border-slate-700 transition"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-slate-100">{meta.name}</span>
-                    <span className="font-arcade text-xs text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded-md border border-cyan-500/40">
-                      LVL {currentLvl}/5
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    {meta.description}
-                  </p>
-                </div>
-
-                {/* Level Pips */}
-                <div className="flex gap-1.5 my-1">
-                  {[1, 2, 3, 4, 5].map((lvl) => (
-                    <div
-                      key={lvl}
-                      className={`h-2 flex-1 rounded-full transition-all ${
-                        lvl <= currentLvl
-                          ? 'bg-gradient-to-r from-cyan-400 to-indigo-500 shadow-[0_0_8px_#06b6d4]'
-                          : 'bg-slate-800'
+                    {/* Upgrade Action Button */}
+                    <button
+                      onClick={() => handleUpgrade(key)}
+                      disabled={isMax || !isUnlocked || garageData.coins < cost}
+                      className={`px-3 py-1.5 rounded-xl font-arcade font-bold text-xs flex items-center gap-1 transition active:scale-95 flex-shrink-0 ${
+                        isMax
+                          ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-default'
+                          : !isUnlocked || garageData.coins < cost
+                          ? 'bg-slate-900 text-slate-500 border border-slate-800 opacity-60'
+                          : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 shadow-md font-black'
                       }`}
-                    />
-                  ))}
-                </div>
+                    >
+                      {isMax ? (
+                        'MAX'
+                      ) : (
+                        <>
+                          <Coins className="w-3 h-3 fill-current" />
+                          <span>{cost}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
 
-                {/* Upgrade Button */}
+            {/* Unlock Locked Car CTA */}
+            {!isUnlocked && (
+              <div className="mt-2 p-4 rounded-2xl bg-gradient-to-r from-amber-950/60 to-rose-950/60 border border-amber-500/50 flex items-center justify-between gap-4 shadow-xl">
+                <div>
+                  <span className="font-arcade text-xs font-bold text-amber-400 block uppercase">
+                    PROTOTYPE LOCKED
+                  </span>
+                  <span className="text-xs text-slate-300">
+                    Unlock permanent access to this high-performance racing machine.
+                  </span>
+                </div>
                 <button
-                  onClick={() => handleUpgrade(meta.key)}
-                  disabled={isMax || !canAfford || !isUnlocked}
-                  className={`w-full py-2.5 px-4 rounded-xl font-arcade text-xs font-bold transition active:scale-95 flex items-center justify-center gap-1.5 ${
-                    isMax
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : canAfford && isUnlocked
-                      ? 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-md'
-                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  }`}
+                  onClick={handleUnlock}
+                  disabled={garageData.coins < currentCar.unlockPrice}
+                  className="px-5 py-2.5 rounded-2xl font-arcade font-black text-xs bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-lg flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50"
                 >
-                  {isMax ? (
-                    <span className="flex items-center gap-1">
-                      <CheckCircle className="w-4 h-4 text-emerald-400" /> MAX LEVEL
-                    </span>
-                  ) : (
-                    <>
-                      <Coins className="w-4 h-4 text-amber-400" />
-                      <span>UPGRADE TO LVL {currentLvl + 1} ({cost} COINS)</span>
-                    </>
-                  )}
+                  <Coins className="w-4 h-4 fill-current" />
+                  <span>UNLOCK ({currentCar.unlockPrice})</span>
                 </button>
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
       </section>
 
-      {/* 4. TRACK SELECTION SECTION */}
+      {/* 3. TRACK & RACE CONFIGURATION */}
       <section className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 shadow-2xl backdrop-blur-md flex flex-col gap-4">
-        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-          <div>
-            <h3 className="font-arcade text-lg md:text-xl font-black text-indigo-400 text-glow">
-              CIRCUIT & TRACK CONFIGURATION
-            </h3>
-            <p className="text-xs text-slate-400">Choose your competition circuit length and visual environment</p>
-          </div>
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <span className="text-xs font-arcade font-bold text-cyan-400 uppercase tracking-wider">
+            Grand Prix Circuit Parameters
+          </span>
+          <span className="text-xs text-slate-400">
+            Procedural 3D Track Layout with Dynamic Splines
+          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -503,7 +493,7 @@ export const GarageMenu: React.FC<GarageMenuProps> = ({
         </div>
       </section>
 
-      {/* 5. BOTTOM COMMAND & ACTION BAR (With Distinct Gaps for Offline and Multiplayer) */}
+      {/* 4. BOTTOM COMMAND & ACTION BAR (With Distinct Gaps for Offline and Multiplayer) */}
       <footer className="sticky bottom-0 bg-slate-950/95 backdrop-blur-lg border-t border-slate-800 p-4 md:p-5 rounded-3xl shadow-2xl flex flex-wrap items-center justify-between gap-6 z-40">
         <div className="flex items-center gap-3">
           {/* AI Crew Chief Advisor Button */}

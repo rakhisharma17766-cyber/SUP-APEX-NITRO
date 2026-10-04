@@ -1,37 +1,21 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInAnonymously,
-  signOut as fbSignOut,
-  onAuthStateChanged,
-  User as FirebaseUser,
-  updateProfile,
-} from 'firebase/auth';
-import {
   getFirestore,
   doc,
   getDoc,
   getDocFromServer,
   setDoc,
   updateDoc,
-  onSnapshot,
   collection,
-  deleteDoc,
-  serverTimestamp,
   getDocs,
   query,
   where,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase App & Services
+// Initialize Firebase App & Firestore Database
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-export { signInWithPopup, signInAnonymously, fbSignOut as signOut, onAuthStateChanged };
 
 export enum OperationType {
   CREATE = 'create',
@@ -47,26 +31,25 @@ export interface FirestoreErrorInfo {
   operationType: OperationType;
   path: string | null;
   authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
+    username?: string | null;
   };
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null,
+  username?: string | null
+) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
+      username: username || getActiveRacerSession()?.username || 'guest',
     },
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  console.warn('Firestore Operation Notice: ', JSON.stringify(errInfo));
   return new Error(JSON.stringify(errInfo));
 }
 
@@ -83,11 +66,116 @@ export async function testFirestoreConnection(): Promise<boolean> {
   }
 }
 
+// -------------------------------------------------------------
+// CUSTOM RACER AUTHENTICATION ENGINE (NAME + PASSWORD ON FIREBASE)
+// -------------------------------------------------------------
+
+export interface RacerAccount {
+  username: string;
+  displayName: string;
+  passwordHash: string;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+export interface ActiveRacerSession {
+  username: string;
+  displayName: string;
+  loggedInAt: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  session: ActiveRacerSession | null;
+  garage?: UserGarageData;
+  error?: string;
+}
+
+const SESSION_KEY = 'sup_nitro_active_racer_session';
+const LOCAL_ACCOUNTS_VAULT = 'sup_nitro_accounts_vault';
+const LOCAL_STORAGE_GARAGE_PREFIX = 'sup_nitro_garage_';
+const LEGACY_STORAGE_KEY = 'sup_nitro_user_garage';
+
+/**
+ * Standard SHA-256 password hashing using native browser Web Crypto API
+ */
+export async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Normalize username for database key (lowercase, alphanumeric + underscore)
+ */
+export function normalizeUsername(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+
+/**
+ * Get the currently logged-in racer session
+ */
+export function getActiveRacerSession(): ActiveRacerSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (raw) {
+      return JSON.parse(raw) as ActiveRacerSession;
+    }
+  } catch (e) {
+    console.warn('Failed to parse active session', e);
+  }
+  return null;
+}
+
+/**
+ * Store the active racer session
+ */
+export function setActiveRacerSession(session: ActiveRacerSession | null) {
+  try {
+    if (session) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } else {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  } catch (e) {
+    console.warn('Failed to set active session', e);
+  }
+}
+
+/**
+ * Helper to cache account locally for offline resilience
+ */
+function cacheAccountLocally(account: RacerAccount) {
+  try {
+    const raw = localStorage.getItem(LOCAL_ACCOUNTS_VAULT);
+    const vault: Record<string, RacerAccount> = raw ? JSON.parse(raw) : {};
+    vault[account.username] = account;
+    localStorage.setItem(LOCAL_ACCOUNTS_VAULT, JSON.stringify(vault));
+  } catch (e) {
+    console.warn('Failed to cache account locally', e);
+  }
+}
+
+function getLocalCachedAccount(username: string): RacerAccount | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_ACCOUNTS_VAULT);
+    if (raw) {
+      const vault: Record<string, RacerAccount> = JSON.parse(raw);
+      return vault[username] || null;
+    }
+  } catch {}
+  return null;
+}
+
+// -------------------------------------------------------------
+// USER GARAGE DATA STRUCTURE & DEFAULTS
+// -------------------------------------------------------------
+
 export interface UserGarageData {
   displayName: string;
-  email?: string;
-  fingerprintAuth?: boolean;
-  biometricKeyId?: string;
+  username?: string;
   coins: number;
   activeCarId: string;
   unlockedCars: string[];
@@ -130,295 +218,334 @@ export const DEFAULT_USER_GARAGE: UserGarageData = {
   },
 };
 
-const LOCAL_STORAGE_KEY = 'sup_nitro_user_garage';
-const BIOMETRIC_SESSION_KEY = 'sup_nitro_biometric_user';
-
-export function loadLocalGarage(): UserGarageData {
+/**
+ * Load local garage for a given username or fallback
+ */
+export function loadLocalGarage(username?: string): UserGarageData {
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const key = username ? `${LOCAL_STORAGE_GARAGE_PREFIX}${username}` : LEGACY_STORAGE_KEY;
+    const raw = localStorage.getItem(key) || (username ? localStorage.getItem(LEGACY_STORAGE_KEY) : null);
     if (raw) {
       return { ...DEFAULT_USER_GARAGE, ...JSON.parse(raw) };
     }
   } catch (e) {
-    console.error('Failed to load local garage', e);
+    console.warn('Failed to load local garage', e);
   }
   return DEFAULT_USER_GARAGE;
 }
 
-export function saveLocalGarage(data: UserGarageData) {
+/**
+ * Save garage to local storage
+ */
+export function saveLocalGarage(data: UserGarageData, username?: string) {
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    const key = username ? `${LOCAL_STORAGE_GARAGE_PREFIX}${username}` : LEGACY_STORAGE_KEY;
+    localStorage.setItem(key, JSON.stringify(data));
+    // Also update current active key for quick boot
+    localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
-    console.error('Failed to save local garage', e);
+    console.warn('Failed to save local garage', e);
   }
 }
 
-export async function loadUserGarage(user: FirebaseUser | null): Promise<UserGarageData> {
-  if (!user) {
+// -------------------------------------------------------------
+// CUSTOM REGISTRATION & LOGIN (DIRECT ON FIREBASE FIRESTORE)
+// -------------------------------------------------------------
+
+/**
+ * Register a new racer account with Name and Password directly on Firebase Firestore
+ */
+export async function registerRacer(name: string, password: string): Promise<AuthResponse> {
+  const cleanName = name.trim();
+  const handle = normalizeUsername(cleanName);
+
+  if (!cleanName || cleanName.length < 2) {
+    return {
+      success: false,
+      session: null,
+      error: 'Racer name must be at least 2 characters long.',
+    };
+  }
+
+  if (!handle) {
+    return {
+      success: false,
+      session: null,
+      error: 'Racer name must contain letters or numbers.',
+    };
+  }
+
+  if (!password || password.length < 3) {
+    return {
+      success: false,
+      session: null,
+      error: 'Password must be at least 3 characters long.',
+    };
+  }
+
+  try {
+    const accountRef = doc(db, 'racer_accounts', handle);
+    let existingSnap;
+    try {
+      existingSnap = await getDoc(accountRef);
+    } catch {
+      // Offline fallback: check local cached vault
+      existingSnap = null;
+    }
+
+    if (existingSnap && existingSnap.exists()) {
+      return {
+        success: false,
+        session: null,
+        error: `Racer name "${cleanName}" is already registered. Please choose another name or log in!`,
+      };
+    }
+
+    // Check local vault if offline
+    if (getLocalCachedAccount(handle)) {
+      return {
+        success: false,
+        session: null,
+        error: `Racer name "${cleanName}" already exists on this machine. Please log in!`,
+      };
+    }
+
+    const hashed = await hashPassword(password);
+    const nowIso = new Date().toISOString();
+
+    const newAccount: RacerAccount = {
+      username: handle,
+      displayName: cleanName,
+      passwordHash: hashed,
+      createdAt: nowIso,
+      lastLoginAt: nowIso,
+    };
+
+    // Save to Firestore
+    try {
+      await setDoc(accountRef, newAccount);
+    } catch (fsErr) {
+      console.warn('Firestore account save note (local cached):', fsErr);
+    }
+
+    cacheAccountLocally(newAccount);
+
+    // Initialize or adapt garage
+    const currentLocal = loadLocalGarage();
+    const newGarage: UserGarageData = {
+      ...currentLocal,
+      displayName: cleanName,
+      username: handle,
+      coins: Math.max(currentLocal.coins, 2500),
+      updatedAt: nowIso,
+    };
+
+    // Save garage in Firestore & local
+    try {
+      await setDoc(doc(db, 'users', handle), newGarage, { merge: true });
+    } catch (gErr) {
+      console.warn('Firestore garage sync note:', gErr);
+    }
+
+    saveLocalGarage(newGarage, handle);
+
+    const session: ActiveRacerSession = {
+      username: handle,
+      displayName: cleanName,
+      loggedInAt: nowIso,
+    };
+
+    setActiveRacerSession(session);
+
+    return {
+      success: true,
+      session,
+      garage: newGarage,
+    };
+  } catch (error) {
+    console.error('Registration failed:', error);
+    return {
+      success: false,
+      session: null,
+      error: error instanceof Error ? error.message : 'Registration failed. Please try again.',
+    };
+  }
+}
+
+/**
+ * Log in to an existing racer account with Name and Password directly from Firebase Firestore
+ */
+export async function loginRacer(name: string, password: string): Promise<AuthResponse> {
+  const cleanName = name.trim();
+  const handle = normalizeUsername(cleanName);
+
+  if (!cleanName || !password) {
+    return {
+      success: false,
+      session: null,
+      error: 'Please enter both your Racer Name and Password.',
+    };
+  }
+
+  try {
+    let accountData: RacerAccount | null = null;
+
+    // 1. Try to fetch from Firebase Firestore
+    try {
+      const accountRef = doc(db, 'racer_accounts', handle);
+      const snap = await getDoc(accountRef);
+      if (snap.exists()) {
+        accountData = snap.data() as RacerAccount;
+      }
+    } catch (fsErr) {
+      console.warn('Firestore fetch note, checking local vault:', fsErr);
+    }
+
+    // 2. Check local vault fallback
+    if (!accountData) {
+      accountData = getLocalCachedAccount(handle);
+    }
+
+    if (!accountData) {
+      return {
+        success: false,
+        session: null,
+        error: `Racer "${cleanName}" not found. Please click "REGISTER" to create a new racer account!`,
+      };
+    }
+
+    // 3. Verify password hash
+    const inputHash = await hashPassword(password);
+    if (accountData.passwordHash !== inputHash) {
+      return {
+        success: false,
+        session: null,
+        error: 'Incorrect password! Please check your credentials and try again.',
+      };
+    }
+
+    // 4. Update lastLoginAt
+    const nowIso = new Date().toISOString();
+    try {
+      await updateDoc(doc(db, 'racer_accounts', handle), {
+        lastLoginAt: nowIso,
+      });
+    } catch {}
+
+    cacheAccountLocally({ ...accountData, lastLoginAt: nowIso });
+
+    // 5. Load saved garage from Firebase Firestore
+    let loadedGarage: UserGarageData = loadLocalGarage(handle);
+    try {
+      const userDocSnap = await getDoc(doc(db, 'users', handle));
+      if (userDocSnap.exists()) {
+        loadedGarage = userDocSnap.data() as UserGarageData;
+      }
+    } catch (gErr) {
+      console.warn('Firestore garage load note, using local cache:', gErr);
+    }
+
+    loadedGarage = {
+      ...loadedGarage,
+      displayName: accountData.displayName || cleanName,
+      username: handle,
+    };
+
+    saveLocalGarage(loadedGarage, handle);
+
+    const session: ActiveRacerSession = {
+      username: handle,
+      displayName: accountData.displayName || cleanName,
+      loggedInAt: nowIso,
+    };
+
+    setActiveRacerSession(session);
+
+    return {
+      success: true,
+      session,
+      garage: loadedGarage,
+    };
+  } catch (error) {
+    console.error('Login error:', error);
+    return {
+      success: false,
+      session: null,
+      error: error instanceof Error ? error.message : 'Login failed. Please try again.',
+    };
+  }
+}
+
+/**
+ * Log out current racer
+ */
+export function logoutRacer(): void {
+  setActiveRacerSession(null);
+}
+
+/**
+ * Load garage for current active racer from Firebase Firestore or Local Storage
+ */
+export async function loadUserGarage(session: ActiveRacerSession | null): Promise<UserGarageData> {
+  if (!session) {
     return loadLocalGarage();
   }
-  const userPath = `users/${user.uid}`;
+
+  const handle = session.username;
   try {
-    const snap = await getDoc(doc(db, 'users', user.uid));
+    const snap = await getDoc(doc(db, 'users', handle));
     if (snap.exists()) {
       const data = snap.data() as UserGarageData;
-      saveLocalGarage(data);
-      return data;
+      const merged: UserGarageData = {
+        ...data,
+        displayName: session.displayName || data.displayName || 'Apex Racer',
+        username: handle,
+      };
+      saveLocalGarage(merged, handle);
+      return merged;
     } else {
+      const local = loadLocalGarage(handle);
       const initial: UserGarageData = {
-        ...loadLocalGarage(),
-        displayName: user.displayName || 'Apex Racer',
-        email: user.email || '',
+        ...local,
+        displayName: session.displayName || 'Apex Racer',
+        username: handle,
         updatedAt: new Date().toISOString(),
       };
-      await setDoc(doc(db, 'users', user.uid), initial);
-      saveLocalGarage(initial);
+      try {
+        await setDoc(doc(db, 'users', handle), initial);
+      } catch {}
+      saveLocalGarage(initial, handle);
       return initial;
     }
   } catch (err) {
-    handleFirestoreError(err, OperationType.GET, userPath);
-    return loadLocalGarage();
+    handleFirestoreError(err, OperationType.GET, `users/${handle}`, handle);
+    return loadLocalGarage(handle);
   }
 }
 
-export async function saveUserGarage(user: FirebaseUser | null, data: UserGarageData) {
-  saveLocalGarage(data);
-  if (!user) return;
-  const userPath = `users/${user.uid}`;
+/**
+ * Save user garage both to Local Storage and Firebase Firestore
+ */
+export async function saveUserGarage(session: ActiveRacerSession | null, data: UserGarageData) {
+  const handle = session?.username;
+  saveLocalGarage(data, handle);
+
+  if (!handle) return;
+
   try {
     await setDoc(
-      doc(db, 'users', user.uid),
+      doc(db, 'users', handle),
       {
         ...data,
+        displayName: session.displayName || data.displayName,
+        username: handle,
         updatedAt: new Date().toISOString(),
       },
       { merge: true }
     );
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, userPath);
+    handleFirestoreError(err, OperationType.WRITE, `users/${handle}`, handle);
   }
-}
-
-// -------------------------------------------------------------
-// BIOMETRIC FINGERPRINT PASSWORDLESS AUTHENTICATION
-// -------------------------------------------------------------
-
-export interface BiometricAuthResult {
-  success: boolean;
-  user: FirebaseUser | null;
-  garage: UserGarageData;
-  error?: string;
-  notice?: string;
-}
-
-function normalizeHandle(name: string): string {
-  return name.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-}
-
-/**
- * Safely acquire auth context with graceful fallback if Identity Toolkit is not enabled
- */
-async function acquireAuthContext(cleanName: string): Promise<{
-  user: FirebaseUser | null;
-  localFallback: boolean;
-  notice?: string;
-}> {
-  try {
-    let currentUser = auth.currentUser;
-    if (!currentUser) {
-      const cred = await signInAnonymously(auth);
-      currentUser = cred.user;
-    }
-    if (currentUser) {
-      await updateProfile(currentUser, { displayName: cleanName }).catch(() => {});
-    }
-    return { user: currentUser, localFallback: false };
-  } catch (err: unknown) {
-    const errorStr = String(err);
-    const code = (err as { code?: string })?.code || '';
-    if (
-      code === 'auth/identity-toolkit-api-has-not-been-enabled' ||
-      code === 'auth/operation-not-allowed' ||
-      code === 'auth/configuration-not-found' ||
-      code === 'auth/admin-restricted-operation' ||
-      errorStr.includes('identity-toolkit-api-has-not-been-enabled')
-    ) {
-      console.warn('Identity Toolkit API not configured on server. Operating in Local Biometric Vault mode.');
-      const localUid = `bio_user_${normalizeHandle(cleanName)}`;
-      const fallbackUser = {
-        uid: localUid,
-        displayName: cleanName,
-        email: null,
-        isAnonymous: true,
-      } as unknown as FirebaseUser;
-
-      return {
-        user: fallbackUser,
-        localFallback: true,
-        notice: 'Authentication API not configured on server. Local Biometric Vault active.',
-      };
-    }
-    throw err;
-  }
-}
-
-/**
- * Sign Up with Player Name and Fingerprint Biometric
- */
-export async function signUpWithFingerprint(
-  playerName: string,
-  fingerprintKeyId: string
-): Promise<BiometricAuthResult> {
-  const cleanName = playerName.trim();
-  const handle = normalizeHandle(cleanName);
-
-  if (!cleanName || cleanName.length < 2) {
-    return {
-      success: false,
-      user: null,
-      garage: DEFAULT_USER_GARAGE,
-      error: 'Please enter a valid player name (at least 2 letters).',
-    };
-  }
-
-  try {
-    const { user: currentUser, localFallback, notice } = await acquireAuthContext(cleanName);
-    const uid = currentUser ? currentUser.uid : `bio_${handle}`;
-
-    const local = loadLocalGarage();
-    const newGarage: UserGarageData = {
-      ...local,
-      displayName: cleanName,
-      fingerprintAuth: true,
-      biometricKeyId: fingerprintKeyId,
-      coins: Math.max(local.coins, 2500),
-      updatedAt: new Date().toISOString(),
-    };
-
-    saveLocalGarage(newGarage);
-    localStorage.setItem(
-      BIOMETRIC_SESSION_KEY,
-      JSON.stringify({ name: cleanName, uid, keyId: fingerprintKeyId })
-    );
-
-    // Save to Firestore if cloud backend is available
-    if (!localFallback) {
-      try {
-        const handleDocRef = doc(db, 'player_handles', handle);
-        await setDoc(handleDocRef, {
-          handle,
-          displayName: cleanName,
-          userId: uid,
-          biometricKeyId: fingerprintKeyId,
-          createdAt: new Date().toISOString(),
-        });
-        await setDoc(doc(db, 'users', uid), newGarage);
-      } catch (firestoreErr) {
-        console.warn('Firestore cloud sync notice:', firestoreErr);
-      }
-    }
-
-    return {
-      success: true,
-      user: currentUser,
-      garage: newGarage,
-      notice,
-    };
-  } catch (error) {
-    console.error('Biometric Sign Up Error', error);
-    return {
-      success: false,
-      user: null,
-      garage: DEFAULT_USER_GARAGE,
-      error: error instanceof Error ? error.message : 'Biometric sign up failed. Please try again.',
-    };
-  }
-}
-
-/**
- * Log In with Player Name and Fingerprint Biometric
- */
-export async function loginWithFingerprint(
-  playerName: string,
-  fingerprintKeyId: string
-): Promise<BiometricAuthResult> {
-  const cleanName = playerName.trim();
-  const handle = normalizeHandle(cleanName);
-
-  if (!cleanName) {
-    return {
-      success: false,
-      user: null,
-      garage: DEFAULT_USER_GARAGE,
-      error: 'Please enter your registered racer name.',
-    };
-  }
-
-  try {
-    const { user: currentUser, localFallback, notice } = await acquireAuthContext(cleanName);
-    const uid = currentUser ? currentUser.uid : `bio_${handle}`;
-
-    // Check local storage vault first
-    const savedLocal = loadLocalGarage();
-    let loadedGarage: UserGarageData = savedLocal;
-
-    // Attempt Firestore cloud retrieval if cloud auth is operational
-    if (!localFallback) {
-      try {
-        const handleDocRef = doc(db, 'player_handles', handle);
-        const handleSnap = await getDoc(handleDocRef);
-
-        if (handleSnap.exists()) {
-          const targetUserId = handleSnap.data().userId;
-          const userSnap = await getDoc(doc(db, 'users', targetUserId));
-          if (userSnap.exists()) {
-            loadedGarage = userSnap.data() as UserGarageData;
-          }
-        }
-      } catch (firestoreErr) {
-        console.warn('Firestore lookup notice, falling back to local biometric vault:', firestoreErr);
-      }
-    }
-
-    // Ensure display name is maintained
-    loadedGarage = {
-      ...loadedGarage,
-      displayName: cleanName,
-      fingerprintAuth: true,
-    };
-
-    saveLocalGarage(loadedGarage);
-    localStorage.setItem(
-      BIOMETRIC_SESSION_KEY,
-      JSON.stringify({ name: cleanName, uid, keyId: fingerprintKeyId })
-    );
-
-    return {
-      success: true,
-      user: currentUser,
-      garage: loadedGarage,
-      notice,
-    };
-  } catch (error) {
-    console.error('Biometric Login Error', error);
-    return {
-      success: false,
-      user: null,
-      garage: DEFAULT_USER_GARAGE,
-      error: error instanceof Error ? error.message : 'Biometric authentication failed.',
-    };
-  }
-}
-
-export function getSavedBiometricHandle(): string | null {
-  try {
-    const raw = localStorage.getItem(BIOMETRIC_SESSION_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return parsed.name || null;
-    }
-  } catch {}
-  return null;
 }
 
 // -------------------------------------------------------------
@@ -444,7 +571,7 @@ export interface RoomPlayerState {
 }
 
 export async function createMultiplayerRoom(
-  user: FirebaseUser,
+  session: ActiveRacerSession | null,
   code: string,
   trackLength: number,
   trackTheme: string,
@@ -452,10 +579,12 @@ export async function createMultiplayerRoom(
 ): Promise<string> {
   const roomRef = doc(collection(db, 'rooms'));
   const roomId = roomRef.id;
+  const playerId = session ? session.username : `guest_${Math.floor(1000 + Math.random() * 9000)}`;
+  const displayName = session ? session.displayName : 'Apex Host';
 
   try {
     await setDoc(roomRef, {
-      hostId: user.uid,
+      hostId: playerId,
       code: code.toUpperCase(),
       trackLength,
       trackTheme,
@@ -464,10 +593,10 @@ export async function createMultiplayerRoom(
       updatedAt: new Date().toISOString(),
     });
 
-    const playerRef = doc(db, 'rooms', roomId, 'players', user.uid);
+    const playerRef = doc(db, 'rooms', roomId, 'players', playerId);
     await setDoc(playerRef, {
-      playerId: user.uid,
-      displayName: user.displayName || 'Apex Host',
+      playerId,
+      displayName,
       carId,
       color: '#ef4444',
       isHost: true,
@@ -485,15 +614,18 @@ export async function createMultiplayerRoom(
 
     return roomId;
   } catch (err) {
-    throw handleFirestoreError(err, OperationType.CREATE, `rooms/${roomId}`);
+    throw handleFirestoreError(err, OperationType.CREATE, `rooms/${roomId}`, playerId);
   }
 }
 
 export async function joinMultiplayerRoom(
-  user: FirebaseUser,
+  session: ActiveRacerSession | null,
   code: string,
   carId: string
 ): Promise<string> {
+  const playerId = session ? session.username : `guest_${Math.floor(1000 + Math.random() * 9000)}`;
+  const displayName = session ? session.displayName : 'Apex Racer';
+
   try {
     const q = query(collection(db, 'rooms'), where('code', '==', code.toUpperCase()));
     const snap = await getDocs(q);
@@ -504,10 +636,10 @@ export async function joinMultiplayerRoom(
     const roomDoc = snap.docs[0];
     const roomId = roomDoc.id;
 
-    const playerRef = doc(db, 'rooms', roomId, 'players', user.uid);
+    const playerRef = doc(db, 'rooms', roomId, 'players', playerId);
     await setDoc(playerRef, {
-      playerId: user.uid,
-      displayName: user.displayName || 'Apex Racer',
+      playerId,
+      displayName,
       carId,
       color: '#06b6d4',
       isHost: false,
@@ -525,7 +657,7 @@ export async function joinMultiplayerRoom(
 
     return roomId;
   } catch (err) {
-    throw handleFirestoreError(err, OperationType.GET, 'rooms');
+    throw handleFirestoreError(err, OperationType.GET, 'rooms', playerId);
   }
 }
 

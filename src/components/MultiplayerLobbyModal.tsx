@@ -1,30 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { User as FirebaseUser } from 'firebase/auth';
 import {
   createMultiplayerRoom,
   joinMultiplayerRoom,
   RoomPlayerState,
   db,
   updateRoomStatus,
+  ActiveRacerSession,
 } from '../services/firebase';
 import { collection, onSnapshot, doc } from 'firebase/firestore';
 import { TrackThemeId, TRACK_THEMES } from '../game/trackGenerator';
 import { VEHICLES } from '../game/cars';
-import { X, Users, Play, Copy, Check, Radio, Sparkles } from 'lucide-react';
+import { X, Users, Play, Copy, Check, Radio, Sparkles, UserCheck } from 'lucide-react';
 import { soundSynth } from '../game/audio';
 
 interface MultiplayerLobbyModalProps {
-  user: FirebaseUser | null;
+  session: ActiveRacerSession | null;
   activeCarId: string;
   onStartMultiplayerRace: (roomId: string, trackLength: number, trackTheme: TrackThemeId) => void;
   onClose: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
-  user,
+  session,
   activeCarId,
   onStartMultiplayerRace,
   onClose,
+  onOpenAuthModal,
 }) => {
   const [tab, setTab] = useState<'host' | 'join'>('host');
   const [roomCode, setRoomCode] = useState<string>(() =>
@@ -80,15 +82,11 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
   }, [activeRoomId, onStartMultiplayerRace]);
 
   const handleCreateRoom = async () => {
-    if (!user) {
-      setErrorMsg('Please sign in with Google to host a multiplayer room!');
-      return;
-    }
     setIsLoading(true);
     setErrorMsg(null);
     try {
       const roomId = await createMultiplayerRoom(
-        user,
+        session,
         roomCode,
         trackLength,
         trackTheme,
@@ -106,10 +104,6 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
   };
 
   const handleJoinRoom = async () => {
-    if (!user) {
-      setErrorMsg('Please sign in with Google to join a multiplayer room!');
-      return;
-    }
     if (!joinCodeInput || joinCodeInput.trim().length < 4) {
       setErrorMsg('Please enter a valid 4-digit room code');
       return;
@@ -117,7 +111,7 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const roomId = await joinMultiplayerRoom(user, joinCodeInput.trim(), activeCarId);
+      const roomId = await joinMultiplayerRoom(session, joinCodeInput.trim(), activeCarId);
       if (!roomId) {
         setErrorMsg('Room not found! Verify code and try again.');
       } else {
@@ -173,6 +167,24 @@ export const MultiplayerLobbyModal: React.FC<MultiplayerLobbyModalProps> = ({
             <p className="text-xs text-slate-400">Real-time room matchmaking & bot fill engine</p>
           </div>
         </div>
+
+        {!session && (
+          <div className="bg-indigo-950/70 border border-indigo-500/50 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+            <div>
+              <p className="font-arcade text-xs font-bold text-white">Cloud Racer Profile</p>
+              <p className="text-[11px] text-slate-300">Log in or create a Racer Profile to sync your trophies, stats & rewards across devices.</p>
+            </div>
+            {onOpenAuthModal && (
+              <button
+                onClick={onOpenAuthModal}
+                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-arcade font-bold text-xs rounded-xl shadow-md flex items-center gap-2 flex-shrink-0 transition active:scale-95"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>RACER LOGIN / REGISTER</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {errorMsg && (
           <div className="bg-rose-950/80 border border-rose-500 text-rose-300 text-xs px-3.5 py-2 rounded-xl">

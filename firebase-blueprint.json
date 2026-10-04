@@ -1,8 +1,39 @@
 {
   "entities": {
+    "RacerAccount": {
+      "title": "Custom Racer Account",
+      "description": "Custom authentication account record with username and password hash",
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "description": "Unique normalized username handle",
+          "maxLength": 64
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Racer display name",
+          "maxLength": 64
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Secure SHA-256 password hash",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account registration timestamp"
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "description": "Last login timestamp"
+        }
+      },
+      "required": ["username", "displayName", "passwordHash"]
+    },
     "User": {
       "title": "User Profile & Garage",
-      "description": "Stores user garage, unlocked cars, stats, and coins",
+      "description": "Stores user garage, unlocked cars, stats, and coins for custom authenticated players",
       "type": "object",
       "properties": {
         "displayName": {
@@ -10,19 +41,10 @@
           "description": "User display name",
           "maxLength": 64
         },
-        "email": {
+        "username": {
           "type": "string",
-          "description": "User email address",
-          "maxLength": 128
-        },
-        "fingerprintAuth": {
-          "type": "boolean",
-          "description": "Whether user authenticated via biometric fingerprint"
-        },
-        "biometricKeyId": {
-          "type": "string",
-          "description": "WebAuthn credential ID",
-          "maxLength": 256
+          "description": "Account handle",
+          "maxLength": 64
         },
         "coins": {
           "type": "number",
@@ -52,33 +74,6 @@
       },
       "required": ["displayName", "coins", "activeCarId", "unlockedCars"]
     },
-    "PlayerHandle": {
-      "title": "Biometric Player Handle",
-      "description": "Mapping of player handle to Firebase UID for passwordless login",
-      "type": "object",
-      "properties": {
-        "handle": {
-          "type": "string",
-          "description": "Normalized player handle",
-          "maxLength": 64
-        },
-        "displayName": {
-          "type": "string",
-          "description": "Formatted player name",
-          "maxLength": 64
-        },
-        "userId": {
-          "type": "string",
-          "description": "Firebase user ID",
-          "maxLength": 128
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Registration timestamp"
-        }
-      },
-      "required": ["handle", "displayName", "userId"]
-    },
     "Room": {
       "title": "Multiplayer Race Room",
       "description": "Lobby and active race configuration",
@@ -86,7 +81,7 @@
       "properties": {
         "hostId": {
           "type": "string",
-          "description": "Host user UID",
+          "description": "Host user handle or ID",
           "maxLength": 128
         },
         "code": {
@@ -126,7 +121,7 @@
       "properties": {
         "playerId": {
           "type": "string",
-          "description": "Player UID or bot ID",
+          "description": "Player handle or bot ID",
           "maxLength": 128
         },
         "displayName": {
@@ -193,13 +188,13 @@
     }
   },
   "firestore": {
+    "/racer_accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/RacerAccount" },
+      "description": "Custom authentication account records"
+    },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/User" },
       "description": "User profile with car garage and coin balance"
-    },
-    "/player_handles/{handleId}": {
-      "schema": { "$ref": "#/entities/PlayerHandle" },
-      "description": "Player handle lookup for biometric passwordless login"
     },
     "/rooms/{roomId}": {
       "schema": { "$ref": "#/entities/Room" },
